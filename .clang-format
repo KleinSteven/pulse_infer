@@ -1,0 +1,139 @@
+BasedOnStyle: Google
+
+# Language and Standard
+Language: Cpp
+Standard: c++20
+
+# Line Length
+ColumnLimit: 110
+
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ContinuationIndentWidth: 4
+IndentExternBlock: Indent
+LambdaBodyIndentation: Signature
+BitFieldColonSpacing: Both
+
+
+InsertNewlineAtEOF: true
+KeepEmptyLinesAtEOF: true
+
+# Pointers and References (left-aligned: int* ptr, int& ref)
+DerivePointerAlignment: false
+PointerAlignment: Left
+ReferenceAlignment: Left
+
+# Qualifiers (const west: const int, not int const)
+QualifierAlignment: Left
+
+# Braces
+BreakBeforeBraces: Attach
+Cpp11BracedListStyle: true
+
+IncludeBlocks: Regroup
+SortIncludes: CaseSensitive
+# IncludeCategories: 头文件分组排序规则（Priority 越小越靠前）：
+# Priority 10: Regex: "^<.*" -> 系统标准库头文件（如 <vector>, <stdio.h>）排在最前面。
+# Priority 20: 本地头文件。
+# Regex: "^<.*Test)/": Test 目录下的头文件。
+# Regex: '^".*/.*"': 带路径的双引号头文件。
+# Regex: ".*": 其他所有头文件。
+# Priority 30: 第三方库头文件。
+# spdlog, toml++, llvm, clang 等特定库被显式放到了最后面
+IncludeCategories:
+  - Regex: "^<.*"
+    Priority: 10
+    SortPriority: 10
+
+  - Regex: ".*"
+    Priority: 20
+    SortPriority: 21
+
+  - Regex: '^["<](Test)/'
+    Priority: 20
+    SortPriority: 22
+
+  - Regex: '^".*/.*"'
+    Priority: 20
+    SortPriority: 23
+
+  - Regex: '^["<](spdlog|cpptrace)/'
+    Priority: 30
+    SortPriority: 31
+
+CompactNamespaces: false
+NamespaceIndentation: None
+
+AlwaysBreakAfterReturnType: None
+BinPackParameters: false
+BinPackArguments: false
+
+AllowShortBlocksOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: false
+AllowAllArgumentsOnNextLine: false
+AllowAllParametersOfDeclarationOnNextLine: false
+AllowBreakBeforeNoexceptSpecifier: Never
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortLambdasOnASingleLine: Inline
+
+CommentPragmas: '(@copydoc|@copybrief|@see|TODO|FIXME|NOTE)'
+ReflowComments: true
+
+AlignAfterOpenBracket: Align
+AlignConsecutiveAssignments: false
+AlignConsecutiveDeclarations: false
+AlignEscapedNewlines: Left
+AlignOperands: Align
+AlignTrailingComments:
+  Kind: Always
+AlignArrayOfStructures: Left
+
+BreakAfterAttributes: Leave
+BreakAfterReturnType: Automatic
+BreakStringLiterals: false
+
+# Spacing
+SpaceAfterCStyleCast: false
+SpaceAfterLogicalNot: false
+SpaceBeforeAssignmentOperators: true
+SpaceBeforeCpp11BracedList: false
+SpaceBeforeCtorInitializerColon: true
+SpaceBeforeInheritanceColon: true
+SpaceBeforeParens: ControlStatements
+SpaceBeforeRangeBasedForLoopColon: true
+SpaceInEmptyParentheses: false
+SpacesBeforeTrailingComments: 2
+SpacesInAngles: Never
+SpacesInCStyleCastParentheses: false
+SpacesInContainerLiterals: false
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+SpaceAfterTemplateKeyword: false
+
+AlwaysBreakTemplateDeclarations: Yes
+
+# Other
+KeepEmptyLinesAtTheStartOfBlocks: false
+MaxEmptyLinesToKeep: 2
+SortUsingDeclarations: Never
+
+# C++20 Specific
+IndentRequiresClause: true
+RequiresClausePosition: OwnLine
+BreakBeforeConceptDeclarations: Always
+
+PenaltyBreakBeforeFirstCallParameter: 19
+PenaltyBreakComment: 300
+PenaltyBreakFirstLessLess: 120
+PenaltyBreakString: 1000
+PenaltyExcessCharacter: 1000000
+PenaltyReturnTypeOnItsOwnLine: 100
+
+
+KeepEmptyLines:
+  AtEndOfFile: false
+  AtStartOfBlock: false
+  AtStartOfFile: false

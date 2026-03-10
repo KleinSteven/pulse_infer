@@ -2,17 +2,6 @@ include_guard()
 
 include(FetchContent)
 
-set(SPDLOG_USE_STD_FORMAT OFF CACHE BOOL "" FORCE)
-set(SPDLOG_NO_EXCEPTIONS ON CACHE BOOL "" FORCE)
-
-# fmt
-FetchContent_Declare(
-    fmt
-    GIT_REPOSITORY https://github.com/fmtlib/fmt.git
-    GIT_TAG        12.0.0
-    GIT_SHALLOW    TRUE
-)
-
 # spdlog
 FetchContent_Declare(
     spdlog
@@ -21,17 +10,14 @@ FetchContent_Declare(
     GIT_SHALLOW    TRUE
 )
 
-# cpptrace
-FetchContent_Declare(
-    cpptrace
-    GIT_REPOSITORY https://github.com/jeremy-rifkin/cpptrace.git
-    GIT_TAG        v1.0.4
-    GIT_SHALLOW    TRUE
-)
-
 set(CPPTRACE_DISABLE_CXX_20_MODULES ON CACHE BOOL "" FORCE)
 
-FetchContent_MakeAvailable(fmt spdlog cpptrace)
+FetchContent_MakeAvailable(spdlog)
+
+target_compile_definitions(spdlog PUBLIC
+    SPDLOG_USE_STD_FORMAT=1
+    SPDLOG_NO_EXCEPTIONS=1
+)
 
 # Google Test (for unit tests)
 if(PULSE_BUILD_TESTS)

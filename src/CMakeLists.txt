@@ -4,7 +4,7 @@
 
 file(GLOB_RECURSE PULSE_CORE_SOURCES
   CONFIGURE_DEPENDS
-  ${CMAKE_CURRENT_SOURCE_DIR}/arch/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/core/*.cpp
 )
 
 if(PULSE_BUILD_SHARED)
@@ -33,7 +33,6 @@ endif()
 # Link dependencies
 target_link_libraries(pulse_core
   PUBLIC
-    fmt::fmt
     spdlog::spdlog
 )
 

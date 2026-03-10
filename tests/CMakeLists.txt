@@ -27,9 +27,9 @@ target_link_options(pulse_tests
 )
 
 if(PULSE_ENABLE_ASAN)
-  set(PULSE_TEST_PROPERTIES
-    PROPERTIES
-      ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0"
+  # Apply ASan runtime options to both gtest discovery and test execution.
+  set_property(TARGET pulse_tests PROPERTY
+    TEST_LAUNCHER "${CMAKE_COMMAND};-E;env;ASAN_OPTIONS=detect_leaks=0"
   )
 endif()
 
@@ -37,5 +37,4 @@ endif()
 gtest_discover_tests(
   pulse_tests
   DISCOVERY_MODE PRE_TEST
-  ${PULSE_TEST_PROPERTIES}
 )

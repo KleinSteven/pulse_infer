@@ -6,6 +6,7 @@
 add_executable(pulse_tests
   core/test_types.cpp
   core/test_error.cpp
+  core/test_allocator.cpp
   test_main.cpp
 )
 

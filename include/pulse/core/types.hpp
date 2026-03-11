@@ -21,4 +21,11 @@ using isize = std::ptrdiff_t;
 using f32 = float;
 using f64 = double;
 
+enum class DeviceType : u8 {
+    CPU = 0,
+    CUDA = 1,
+    Unified = 3,  // CPU and CUDA UnifiedMemory
+    Mmap = 4,
+};
+
 }  // namespace pulse

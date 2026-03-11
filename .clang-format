@@ -59,7 +59,7 @@ IncludeCategories:
     Priority: 20
     SortPriority: 23
 
-  - Regex: '^["<](spdlog|cpptrace)/'
+  - Regex: '^["<](spdlog|gtest)/'
     Priority: 30
     SortPriority: 31
 

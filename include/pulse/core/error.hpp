@@ -13,10 +13,13 @@ enum class ErrorCode : u32 {
     Ok = 0,
 
     // Memory errors (1-99)
-
+    OutOfMemory = 1,
+    NullPointer = 2,
 
     // I/O errors (100-199)
-
+    OpenFileError = 100,
+    GetFileSizeError = 101,
+    MmapError = 102,
 
     // Tensor errors (200-299)
 
@@ -28,10 +31,14 @@ enum class ErrorCode : u32 {
 
 
     // CUDA errors (500-599)
+    CudaError = 500,
+    CudaOutOfMemory = 501,
 
 
     // Generic errors (900-999)
     Unknown = 900,
+    InvalidAlignment = 901,
+    NotImplemented = 902,
 
 };
 

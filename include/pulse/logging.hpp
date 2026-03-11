@@ -5,12 +5,19 @@
 #include <format>
 #include <source_location>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <utility>
 
 #include "spdlog/spdlog.h"
 
-namespace pulse_infer::logging {
+namespace pulse::logging {
+
+namespace detail {
+
+spdlog::logger& logger();
+
+}  // namespace detail
 
 enum class Level : std::int8_t {
     trace,
@@ -56,7 +63,8 @@ struct logging_rformat {
 template<typename... Args>
 void log(Level level, std::source_location location, std::format_string<Args...> fmt, Args&&... args) {
     const auto spd_level = to_spdlog_level(level);
-    if (!spdlog::should_log(spd_level))
+    auto& pulse_logger = detail::logger();
+    if (!pulse_logger.should_log(spd_level))
         return;
 
     spdlog::source_loc loc{
@@ -68,23 +76,23 @@ void log(Level level, std::source_location location, std::format_string<Args...>
     using spdlog_fmt = spdlog::format_string_t<Args...>;
 
     if constexpr (std::same_as<spdlog_fmt, std::string_view>) {
-        spdlog::log(loc, spd_level, fmt.get(), std::forward<Args>(args)...);
+        pulse_logger.log(loc, spd_level, fmt.get(), std::forward<Args>(args)...);
     } else {
-        spdlog::log(loc, spd_level, fmt, std::forward<Args>(args)...);
+        pulse_logger.log(loc, spd_level, fmt, std::forward<Args>(args)...);
     }
 }
 
 inline void set_level(Level level) {
-    spdlog::set_level(to_spdlog_level(level));
+    detail::logger().set_level(to_spdlog_level(level));
 }
 
 inline void set_pattern(std::string pattern) {
-    spdlog::set_pattern(pattern);
+    detail::logger().set_pattern(std::move(pattern));
 }
 
-}  // namespace pulse_infer::logging
+}  // namespace pulse::logging
 
-namespace pulse_infer {
+namespace pulse {
 
 template<typename... Args>
 using logging_format = logging::logging_rformat<std::type_identity_t<Args>...>;
@@ -93,32 +101,32 @@ using Level = logging::Level;
 
 template<typename... Args>
 void info(logging_format<Args...> fmt, Args&&... args) {
-    pulse_infer::logging::log(logging::Level::info, fmt.location, fmt.str, std::forward<Args>(args)...);
+    pulse::logging::log(logging::Level::info, fmt.location, fmt.str, std::forward<Args>(args)...);
 }
 
 template<typename... Args>
 void trace(logging_format<Args...> fmt, Args&&... args) {
-    pulse_infer::logging::log(logging::Level::trace, fmt.location, fmt.str, std::forward<Args>(args)...);
+    pulse::logging::log(logging::Level::trace, fmt.location, fmt.str, std::forward<Args>(args)...);
 }
 
 template<typename... Args>
 void debug(logging_format<Args...> fmt, Args&&... args) {
-    pulse_infer::logging::log(logging::Level::debug, fmt.location, fmt.str, std::forward<Args>(args)...);
+    pulse::logging::log(logging::Level::debug, fmt.location, fmt.str, std::forward<Args>(args)...);
 }
 
 template<typename... Args>
 void warn(logging_format<Args...> fmt, Args&&... args) {
-    pulse_infer::logging::log(logging::Level::warn, fmt.location, fmt.str, std::forward<Args>(args)...);
+    pulse::logging::log(logging::Level::warn, fmt.location, fmt.str, std::forward<Args>(args)...);
 }
 
 template<typename... Args>
 void error(logging_format<Args...> fmt, Args&&... args) {
-    pulse_infer::logging::log(logging::Level::err, fmt.location, fmt.str, std::forward<Args>(args)...);
+    pulse::logging::log(logging::Level::err, fmt.location, fmt.str, std::forward<Args>(args)...);
 }
 
 template<typename... Args>
 void fatal(logging_format<Args...> fmt, Args&&... args) {
-    pulse_infer::logging::log(logging::Level::critical, fmt.location, fmt.str, std::forward<Args>(args)...);
+    pulse::logging::log(logging::Level::critical, fmt.location, fmt.str, std::forward<Args>(args)...);
 }
 
-}  // namespace pulse_infer
+}  // namespace pulse

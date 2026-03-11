@@ -5,18 +5,9 @@
 
 #include <gtest/gtest.h>
 
-#include "pulse_infer/core/config.h"
+#include "pulse/core/error.hpp"
+#include "pulse/core/types.hpp"
 
-
-TEST(UseTest, TestAdd) {
-    EXPECT_EQ(1 + 2, 3);
-}
-
-TEST(UseTest, TestFmt) {
-    pulse_infer::test_config tmp{};
-    tmp.test_config_print();
-    EXPECT_EQ(1 + 2, 3);
-}
 
 int main(int argc, char** argv) {
     testing::InitGoogleTest(&argc, argv);

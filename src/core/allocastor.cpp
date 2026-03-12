@@ -29,11 +29,11 @@ namespace pulse {
 /// CPUAllocator
 [[nodiscard]] Result<void*> CPUAllocator::allocate(usize size, usize alignment) {
     if (alignment == 0 || (alignment & (alignment - 1)) != 0) {
-        return Err<void*>(ErrorCode::InvalidAlignment, "Alignment must be power of 2");
+        return Err<void*>(ErrorCode::InvalidArgument, "Alignment must be power of 2");
     }
 
     if (size == 0) {
-        return Err<void*>(ErrorCode::InvalidAlignment, "Allocate size cannot be zero");
+        return Err<void*>(ErrorCode::InvalidArgument, "Allocate size cannot be zero");
     }
 
     if (size > std::numeric_limits<usize>::max() - (alignment - 1)) {
@@ -79,7 +79,7 @@ namespace pulse {
 /// CUDAAllocator
 [[nodiscard]] Result<void*> CUDAAllocator::allocate(usize size, [[maybe_unused]] usize alignment) {
     if (size == 0) {
-        return Err<void*>(ErrorCode::InvalidAlignment, "Cannot allocate zero bytes");
+        return Err<void*>(ErrorCode::InvalidArgument, "Cannot allocate zero bytes");
     }
 
     void* ptr = nullptr;
@@ -116,7 +116,7 @@ namespace pulse {
 /// UnifiedAllocator
 [[nodiscard]] Result<void*> UnifiedAllocator::allocate(usize size, [[maybe_unused]] usize alignment) {
     if (size == 0) {
-        return Err<void*>(ErrorCode::InvalidAlignment, "Cannot allocate zero bytes");
+        return Err<void*>(ErrorCode::InvalidArgument, "Cannot allocate zero bytes");
     }
 
     void* ptr = nullptr;

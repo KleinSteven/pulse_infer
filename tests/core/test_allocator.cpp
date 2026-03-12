@@ -109,7 +109,7 @@ TEST(CPUAllocatorTest, ZeroSizeAllocation) {
     auto result = allocator.allocate(0);
 
     EXPECT_TRUE(result.is_err());
-    EXPECT_EQ(result.error().code(), ErrorCode::InvalidAlignment);
+    EXPECT_EQ(result.error().code(), ErrorCode::InvalidArgument);
 }
 
 TEST(CPUAllocatorTest, InvalidAlignment) {
@@ -118,7 +118,7 @@ TEST(CPUAllocatorTest, InvalidAlignment) {
     auto result = allocator.allocate(1024, 3);
 
     EXPECT_TRUE(result.is_err());
-    EXPECT_EQ(result.error().code(), ErrorCode::InvalidAlignment);
+    EXPECT_EQ(result.error().code(), ErrorCode::InvalidArgument);
 }
 
 TEST(CPUAllocatorTest, RejectsAlignedSizeOverflow) {
@@ -197,7 +197,7 @@ TYPED_TEST(CudaBackedAllocatorTest, ZeroSizeAllocation) {
     auto result = allocator.allocate(0, 64);
 
     EXPECT_TRUE(result.is_err());
-    EXPECT_EQ(result.error().code(), ErrorCode::InvalidAlignment);
+    EXPECT_EQ(result.error().code(), ErrorCode::InvalidArgument);
 }
 
 TYPED_TEST(CudaBackedAllocatorTest, NullPointerDeallocation) {
@@ -297,7 +297,7 @@ TYPED_TEST(CudaBackedAllocatorTest, MakeUniqueAllocPropagatesAllocationFailure) 
     auto result = make_unique_alloc(allocator, 0, 64);
 
     EXPECT_TRUE(result.is_err());
-    EXPECT_EQ(result.error().code(), ErrorCode::InvalidAlignment);
+    EXPECT_EQ(result.error().code(), ErrorCode::InvalidArgument);
 }
 
 #endif

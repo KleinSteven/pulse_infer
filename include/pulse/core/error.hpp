@@ -37,7 +37,7 @@ enum class ErrorCode : u32 {
 
     // Generic errors (900-999)
     Unknown = 900,
-    InvalidAlignment = 901,
+    InvalidArgument = 901,
     NotImplemented = 902,
 
 };

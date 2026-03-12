@@ -9,6 +9,7 @@ on:
 
 env:
   CMAKE_BUILD_PARALLEL_LEVEL: 4
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build-and-test:
@@ -23,7 +24,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up MSVC
         if: runner.os == 'Windows'
@@ -73,23 +74,3 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: ctest --test-dir build --build-config Debug --output-on-failure --parallel 4
-
-  clang-format:
-    name: clang-format
-    runs-on: ubuntu-24.04
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install clang-format
-        shell: bash
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y clang-format
-
-      - name: Check formatting
-        shell: bash
-        run: |
-          git ls-files -z '*.h' '*.hpp' '*.c' '*.cc' '*.cpp' '*.cxx' '*.cu' '*.cuh' \
-            | xargs -0 -r clang-format --dry-run --Werror

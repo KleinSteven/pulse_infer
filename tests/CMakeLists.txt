@@ -8,6 +8,7 @@ add_executable(pulse_tests
   core/test_error.cpp
   core/test_allocator.cpp
   core/test_buffer.cpp
+  core/test_tensor.cpp
   test_main.cpp
 )
 

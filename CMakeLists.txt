@@ -123,6 +123,7 @@ include("${PROJECT_SOURCE_DIR}/cmake/package.cmake")
 # Subdirectories
 # ============================================================================
 add_subdirectory(src)
+add_subdirectory(demo)
 
 if(PULSE_BUILD_TESTS)
   add_subdirectory(tests)

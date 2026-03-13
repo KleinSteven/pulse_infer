@@ -14,13 +14,6 @@
 
 namespace pulse {
 
-/**
- * @class Buffer
- * @brief RAII wrapper for device memory
- *
- * Buffer manages a contiguous block of memory on a specific device.
- * It provides ownership semantics and automatic deallocation.
- */
 class Buffer {
 public:
     Buffer() = default;
@@ -33,14 +26,16 @@ public:
     Buffer& operator=(const Buffer&) = delete;
 
     Buffer(Buffer&& other) noexcept
-        : data_(other.data_), size_(other.size_), device_(other.device_), alignment_(other.alignment_) {
+        : data_(other.data_),
+          size_(other.size_),
+          device_(other.device_),
+          alignment_(other.alignment_) {
         other.data_ = nullptr;
         other.size_ = 0;
     }
 
     Buffer& operator=(Buffer&& other) noexcept {
         if (this != std::addressof(other)) {
-            // free old this
             free();
             data_ = other.data_;
             size_ = other.size_;
@@ -113,7 +108,7 @@ public:
 
     template<typename T>
     [[nodiscard]] const T* data_as() const noexcept {
-        return static_cast<T*>(data_);
+        return static_cast<const T*>(data_);
     }
 
     template<typename T>
@@ -153,8 +148,9 @@ public:
                              "Source and destination buffers must have same size");
         }
 
-        if (src.empty())
+        if (src.empty()) {
             return Ok();
+        }
 
         if (device_ == DeviceType::CPU && src.device_ == DeviceType::CPU) {
             std::memcpy(data_, src.data_, size_);
@@ -188,8 +184,9 @@ public:
     }
 
     [[nodiscard]] Result<Buffer> clone() const {
-        if (empty())
+        if (empty()) {
             return Ok(Buffer());
+        }
 
         auto buffer_res = Buffer::create(size_, device_, alignment_);
 
@@ -209,8 +206,9 @@ public:
     }
 
     [[nodiscard]] Result<void> zero() {
-        if (empty())
+        if (empty()) {
             return Ok();
+        }
 
         if (device_ == DeviceType::CPU) {
             std::memset(data_, 0, size_);

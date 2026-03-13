@@ -1,4 +1,5 @@
 #ifdef PULSE_USE_CUDA
+#include <cuda_bf16.h>
 #include <cuda_runtime.h>
 #endif
 
@@ -339,6 +340,36 @@ TEST(TensorTest, ToSupportsCpuCudaRoundTrip) {
     Tensor roundtrip = std::move(roundtrip_result.value());
     EXPECT_EQ(roundtrip.device(), DeviceType::CPU);
     expect_array_eq(roundtrip.ptr<f32>(), kData);
+}
+
+TEST(TensorTest, FromVectorSupportsCudaBFloat16) {
+    const std::vector<bf16> data{
+        __float2bfloat16(1.25f),
+        __float2bfloat16(-2.5f),
+        __float2bfloat16(3.75f),
+    };
+
+    auto cuda_result = Tensor::from_vector(data, DeviceType::CUDA);
+    if (!cuda_result.is_ok()) {
+        GTEST_SKIP() << cuda_result.error().message();
+    }
+
+    Tensor cuda_tensor = std::move(cuda_result.value());
+    EXPECT_EQ(cuda_tensor.dtype(), DataType::BFloat16);
+    EXPECT_EQ(cuda_tensor.device(), DeviceType::CUDA);
+    EXPECT_EQ(cuda_tensor.size(), data.size());
+    EXPECT_EQ(cuda_tensor.byte_size(), data.size() * sizeof(bf16));
+
+    auto host_result = cuda_tensor.to(DeviceType::CPU);
+    ASSERT_TRUE(host_result.is_ok()) << host_result.error().message();
+
+    Tensor host_tensor = std::move(host_result.value());
+    const auto* host_data = host_tensor.ptr<bf16>();
+    ASSERT_NE(host_data, nullptr);
+
+    EXPECT_FLOAT_EQ(__bfloat162float(host_data[0]), 1.25f);
+    EXPECT_FLOAT_EQ(__bfloat162float(host_data[1]), -2.5f);
+    EXPECT_FLOAT_EQ(__bfloat162float(host_data[2]), 3.75f);
 }
 
 #endif

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cstring>
-#include <limits>
+#include <format>
 #include <vector>
 
 #include "pulse/core/buffer.hpp"
@@ -46,11 +46,26 @@ public:
 
         if (device == DeviceType::CPU) {
             std::memcpy(tensor.data(), data.data(), data.size() * sizeof(T));
-        } else {
-            return Err<Tensor>(ErrorCode::NotImplemented, "CUDA data copy not yet implemented");
+            return Ok(std::move(tensor));
         }
 
-        return Ok(std::move(tensor));
+#ifdef PULSE_USE_CUDA
+        if (device == DeviceType::CUDA) {
+            cudaError_t err = cudaMemcpy(tensor.data(),
+                                         data.data(),
+                                         data.size() * sizeof(T),
+                                         cudaMemcpyKind::cudaMemcpyHostToDevice);
+
+            if (err != cudaSuccess) {
+                auto str = std::format("cudaMemcpy failed: {}", cudaGetErrorString(err));
+                return Err<Tensor>(ErrorCode::CudaError, str);
+            }
+
+            return Ok(std::move(tensor));
+        }
+#endif
+
+        return Err<Tensor>(ErrorCode::InvalidArgument, "Unsupported device");
     }
 
     [[nodiscard]] Result<Tensor> to(DeviceType device) const;

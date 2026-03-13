@@ -4,6 +4,8 @@ cmake-build-*/
 out/
 dist/
 
+model/
+
 .cache/
 
 # Compiled files

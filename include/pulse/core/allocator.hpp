@@ -128,6 +128,22 @@ public:
         return DeviceType::Mmap;
     }
 
+    [[nodiscard]] void* data() noexcept {
+        return base_ptr_;
+    }
+
+    [[nodiscard]] const void* data() const noexcept {
+        return base_ptr_;
+    }
+
+    [[nodiscard]] usize size() const noexcept {
+        return size_;
+    }
+
+    [[nodiscard]] const std::string& file_path() const noexcept {
+        return file_path_;
+    }
+
 private:
     void reset_state() noexcept;
 

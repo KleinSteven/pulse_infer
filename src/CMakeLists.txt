@@ -5,6 +5,7 @@
 file(GLOB_RECURSE PULSE_CORE_SOURCES
   CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/core/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/model/*.cpp
 )
 
 if(PULSE_BUILD_SHARED)
@@ -34,6 +35,7 @@ endif()
 target_link_libraries(pulse_core
   PUBLIC
     spdlog::spdlog
+    nlohmann_json::nlohmann_json
 )
 
 if(PULSE_BUILD_CUDA)

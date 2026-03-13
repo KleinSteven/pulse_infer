@@ -3,6 +3,10 @@
 #include <cstddef>
 #include <cstdint>
 
+#ifdef PULSE_USE_CUDA
+#include <cuda_bf16.h>
+#endif
+
 namespace pulse {
 
 using i8 = std::int8_t;
@@ -20,6 +24,10 @@ using isize = std::ptrdiff_t;
 
 using f32 = float;
 using f64 = double;
+
+#ifdef PULSE_USE_CUDA
+using bf16 = __nv_bfloat16;
+#endif
 
 enum class DeviceType : u8 {
     CPU = 0,
@@ -54,6 +62,9 @@ enum class DataType : u8 {
     UInt16 = 7,
     UInt32 = 8,
     UInt64 = 9,
+    Float16 = 10,
+    BFloat16 = 11,
+    Bool = 12,
 };
 
 constexpr usize data_type_size(DataType type) noexcept {
@@ -66,12 +77,15 @@ constexpr usize data_type_size(DataType type) noexcept {
         case DataType::Int64:
         case DataType::UInt64:
             return 8;
-        case DataType::Int8:
-        case DataType::UInt8:
-            return 1;
+        case DataType::Float16:
+        case DataType::BFloat16:
         case DataType::Int16:
         case DataType::UInt16:
             return 2;
+        case DataType::Int8:
+        case DataType::UInt8:
+        case DataType::Bool:
+            return 1;
         default:
             return 0;
     }
@@ -83,6 +97,12 @@ constexpr const char* data_type_str(DataType type) noexcept {
             return "float32";
         case DataType::Float64:
             return "float64";
+        case DataType::Float16:
+            return "float16";
+        case DataType::BFloat16:
+            return "bfloat16";
+        case DataType::Bool:
+            return "bool";
         case DataType::Int8:
             return "int8";
         case DataType::Int16:
@@ -156,6 +176,13 @@ template<>
 struct CppTypeToDataType<f64> {
     static constexpr DataType value = DataType::Float64;
 };
+
+#ifdef PULSE_USE_CUDA
+template<>
+struct CppTypeToDataType<bf16> {
+    static constexpr DataType value = DataType::BFloat16;
+};
+#endif
 
 template<typename T>
 constexpr DataType cpp_type_to_data_type_v = CppTypeToDataType<T>::value;

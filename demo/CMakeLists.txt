@@ -3,23 +3,23 @@
 # ============================================================================
 
 # Test executable
-add_executable(load_safetemsor_demo
-  load_safetemsor.cpp
+add_executable(load_safetensor_demo
+  load_safetensor.cpp
 )
 
 # Link against pulse_core and GTest
-target_link_libraries(load_safetemsor_demo
+target_link_libraries(load_safetensor_demo
   PRIVATE
     pulse_core
 )
 
 # Target-scoped compile and link options
-target_compile_options(load_safetemsor_demo
+target_compile_options(load_safetensor_demo
   PRIVATE
     ${PULSE_COMPILE_OPTIONS}
 )
 
-target_link_options(load_safetemsor_demo
+target_link_options(load_safetensor_demo
   PRIVATE
     ${PULSE_LINK_OPTIONS}
 )

@@ -28,7 +28,9 @@ jobs:
 
       - name: Set up MSVC
         if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1
+        uses: TheMrMilchmann/setup-msvc-dev@v4
+        with:
+          arch: x64
 
       - name: Set Linux compiler
         if: runner.os == 'Linux'

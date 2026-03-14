@@ -20,11 +20,6 @@ namespace {
 
 using json = nlohmann::json;
 
-struct ParsedTensor {
-    TensorMetadata metadata;
-    DataType dtype = DataType::Float32;
-};
-
 enum class SafeTensorDType : u8 {
     Bool,
     U8,
@@ -276,12 +271,21 @@ parse_safetensor_dtype(std::string_view dtype) noexcept {
     return Ok(count);
 }
 
-[[nodiscard]] Result<ParsedTensor> parse_tensor_entry(const std::string& tensor_name,
-                                                      const json& value,
-                                                      u64 payload_size) {
+[[nodiscard]] Result<u64> checked_byte_count(u64 num_elements, u64 item_size, std::string_view tensor_name) {
+    if (num_elements > std::numeric_limits<u64>::max() / item_size) {
+        return Err<u64>(ErrorCode::InvalidArgument,
+                        std::format("Tensor '{}' byte size overflow", tensor_name));
+    }
+
+    return Ok(num_elements * item_size);
+}
+
+[[nodiscard]] Result<TensorMetadata> parse_tensor_entry(const std::string& tensor_name,
+                                                        const json& value,
+                                                        u64 payload_size) {
     if (!value.is_object()) {
-        return Err<ParsedTensor>(ErrorCode::InvalidArgument,
-                                 std::format("Tensor '{}' metadata must be an object", tensor_name));
+        return Err<TensorMetadata>(ErrorCode::InvalidArgument,
+                                   std::format("Tensor '{}' metadata must be an object", tensor_name));
     }
 
     const auto dtype_it = value.find("dtype");
@@ -289,77 +293,88 @@ parse_safetensor_dtype(std::string_view dtype) noexcept {
     const auto offsets_it = value.find("data_offsets");
 
     if (dtype_it == value.end() || !dtype_it->is_string()) {
-        return Err<ParsedTensor>(ErrorCode::InvalidArgument,
-                                 std::format("Tensor '{}' is missing string field 'dtype'", tensor_name));
+        return Err<TensorMetadata>(ErrorCode::InvalidArgument,
+                                   std::format("Tensor '{}' is missing string field 'dtype'", tensor_name));
     }
 
     if (shape_it == value.end()) {
-        return Err<ParsedTensor>(ErrorCode::InvalidArgument,
-                                 std::format("Tensor '{}' is missing field 'shape'", tensor_name));
+        return Err<TensorMetadata>(ErrorCode::InvalidArgument,
+                                   std::format("Tensor '{}' is missing field 'shape'", tensor_name));
     }
 
     if (offsets_it == value.end()) {
-        return Err<ParsedTensor>(ErrorCode::InvalidArgument,
-                                 std::format("Tensor '{}' is missing field 'data_offsets'", tensor_name));
+        return Err<TensorMetadata>(ErrorCode::InvalidArgument,
+                                   std::format("Tensor '{}' is missing field 'data_offsets'", tensor_name));
     }
 
-    ParsedTensor parsed_tensor;
-    parsed_tensor.metadata.name = tensor_name;
-    parsed_tensor.metadata.dtype = dtype_it->get<std::string>();
-    parsed_tensor.metadata.item_size = dtype_size_bytes(parsed_tensor.metadata.dtype);
+    TensorMetadata metadata;
+    metadata.name = tensor_name;
+    metadata.dtype = dtype_it->get<std::string>();
+    metadata.item_size = dtype_size_bytes(metadata.dtype);
 
-    if (parsed_tensor.metadata.item_size == 0) {
-        return Err<ParsedTensor>(ErrorCode::InvalidArgument,
-                                 std::format("Tensor '{}' uses unsupported dtype '{}'",
-                                             tensor_name,
-                                             parsed_tensor.metadata.dtype));
+    if (metadata.item_size == 0) {
+        return Err<TensorMetadata>(ErrorCode::InvalidArgument,
+                                   std::format("Tensor '{}' uses unsupported dtype '{}'",
+                                               tensor_name,
+                                               metadata.dtype));
     }
 
-    auto dtype_result = safetensor_dtype(parsed_tensor.metadata.dtype);
+    auto dtype_result = safetensor_dtype(metadata.dtype);
     if (!dtype_result) {
-        return Err<ParsedTensor>(std::move(dtype_result.error()));
+        return Err<TensorMetadata>(std::move(dtype_result.error()));
     }
-    parsed_tensor.dtype = dtype_result.value();
+    metadata.data_type = dtype_result.value();
 
     auto shape_result = parse_shape(*shape_it, tensor_name);
     if (!shape_result) {
-        return Err<ParsedTensor>(std::move(shape_result.error()));
+        return Err<TensorMetadata>(std::move(shape_result.error()));
     }
-    parsed_tensor.metadata.shape = std::move(shape_result.value());
+    metadata.shape = std::move(shape_result.value());
 
     auto offsets_result = parse_data_offsets(*offsets_it, tensor_name);
     if (!offsets_result) {
-        return Err<ParsedTensor>(std::move(offsets_result.error()));
+        return Err<TensorMetadata>(std::move(offsets_result.error()));
     }
 
-    parsed_tensor.metadata.data_begin = offsets_result.value().first;
-    parsed_tensor.metadata.data_end = offsets_result.value().second;
+    metadata.data_begin = offsets_result.value().first;
+    metadata.data_end = offsets_result.value().second;
 
-    if (parsed_tensor.metadata.data_end > payload_size) {
-        return Err<ParsedTensor>(ErrorCode::InvalidArgument,
-                                 std::format("Tensor '{}' data range [{} , {}) exceeds payload size {}",
-                                             tensor_name,
-                                             parsed_tensor.metadata.data_begin,
-                                             parsed_tensor.metadata.data_end,
-                                             payload_size));
+    if (metadata.data_end > payload_size) {
+        return Err<TensorMetadata>(ErrorCode::InvalidArgument,
+                                   std::format("Tensor '{}' data range [{} , {}) exceeds payload size {}",
+                                               tensor_name,
+                                               metadata.data_begin,
+                                               metadata.data_end,
+                                               payload_size));
     }
 
-    auto count_result = checked_element_count(parsed_tensor.metadata.shape, tensor_name);
+    auto count_result = checked_element_count(metadata.shape, tensor_name);
     if (!count_result) {
-        return Err<ParsedTensor>(std::move(count_result.error()));
+        return Err<TensorMetadata>(std::move(count_result.error()));
     }
-    parsed_tensor.metadata.num_elements = count_result.value();
+    metadata.num_elements = count_result.value();
 
-    const auto expected_bytes = parsed_tensor.metadata.num_elements * parsed_tensor.metadata.item_size;
-    if (expected_bytes != parsed_tensor.metadata.byte_size()) {
-        return Err<ParsedTensor>(ErrorCode::InvalidArgument,
-                                 std::format("Tensor '{}' byte size mismatch: expected {}, got {}",
-                                             tensor_name,
-                                             expected_bytes,
-                                             parsed_tensor.metadata.byte_size()));
+    if (metadata.num_elements == 0) {
+        return Err<TensorMetadata>(ErrorCode::InvalidArgument,
+                                   std::format("Tensor '{}' must have at least one element", tensor_name));
     }
 
-    return Ok(std::move(parsed_tensor));
+    auto expected_bytes_result =
+        checked_byte_count(metadata.num_elements, metadata.item_size, tensor_name);
+    if (!expected_bytes_result) {
+        return Err<TensorMetadata>(std::move(expected_bytes_result.error()));
+    }
+
+    const auto expected_bytes = expected_bytes_result.value();
+    if (expected_bytes != metadata.byte_size()) {
+        return Err<TensorMetadata>(ErrorCode::InvalidArgument,
+                                   std::format("Tensor '{}' byte size mismatch: expected {}, got {}",
+                                               tensor_name,
+                                               expected_bytes,
+                                               metadata.byte_size()));
+    }
+
+    return Ok(std::move(metadata));
 }
 
 [[nodiscard]] std::span<const u8>
@@ -389,15 +404,15 @@ tensor_bytes(const u8* file_data, u64 file_size, u64 payload_offset, const Tenso
     return Ok(std::move(dims));
 }
 
-[[nodiscard]] Result<Tensor> build_tensor_from_bytes(const ParsedTensor& parsed_tensor,
+[[nodiscard]] Result<Tensor> build_tensor_from_bytes(const TensorMetadata& metadata,
                                                      std::span<const u8> bytes,
                                                      DeviceType device) {
-    auto dims_result = to_i32_dims(parsed_tensor.metadata);
+    auto dims_result = to_i32_dims(metadata);
     if (!dims_result) {
         return Err<Tensor>(std::move(dims_result.error()));
     }
 
-    auto tensor_result = Tensor::create(dims_result.value(), parsed_tensor.dtype, device);
+    auto tensor_result = Tensor::create(dims_result.value(), metadata.data_type, device);
     if (!tensor_result) {
         return tensor_result;
     }
@@ -429,7 +444,7 @@ tensor_bytes(const u8* file_data, u64 file_size, u64 payload_offset, const Tenso
 
 }  // namespace
 
-Result<SafeTensorLoader> SafeTensorLoader::load(const std::filesystem::path& path, DeviceType device) {
+Result<SafeTensorLoader> SafeTensorLoader::load(const std::filesystem::path& path) {
     auto mmap_allocator = std::make_unique<MmapAllocator>(path.string());
     auto init_result = mmap_allocator->init();
     if (!init_result) {
@@ -479,9 +494,10 @@ Result<SafeTensorLoader> SafeTensorLoader::load(const std::filesystem::path& pat
     loader.file_size_ = file_size;
     loader.header_size_ = header_size;
     loader.payload_offset_ = payload_offset;
+    loader.mmap_allocator_ = std::move(mmap_allocator);
 
     const auto payload_size = file_size - payload_offset;
-    std::vector<ParsedTensor> parsed_tensors;
+    std::vector<TensorMetadata> parsed_tensors;
 
     for (const auto& [key, value] : header_json.items()) {
         if (key == "__metadata__") {
@@ -495,8 +511,6 @@ Result<SafeTensorLoader> SafeTensorLoader::load(const std::filesystem::path& pat
                     return Err<SafeTensorLoader>(ErrorCode::InvalidArgument,
                                                  std::format("Metadata '{}' must be a string", meta_key));
                 }
-
-                loader.metadata_.emplace(meta_key, meta_value.get<std::string>());
             }
 
             continue;
@@ -510,55 +524,62 @@ Result<SafeTensorLoader> SafeTensorLoader::load(const std::filesystem::path& pat
         parsed_tensors.push_back(std::move(parsed_result.value()));
     }
 
-    std::ranges::sort(parsed_tensors, [](const ParsedTensor& lhs, const ParsedTensor& rhs) {
-        return lhs.metadata.data_begin < rhs.metadata.data_begin;
+    std::ranges::sort(parsed_tensors, [](const TensorMetadata& lhs, const TensorMetadata& rhs) {
+        return lhs.data_begin < rhs.data_begin;
     });
 
     u64 previous_end = 0;
-    for (const auto& parsed_tensor : parsed_tensors) {
-        if (parsed_tensor.metadata.data_begin < previous_end) {
+    for (const auto& metadata : parsed_tensors) {
+        if (metadata.data_begin < previous_end) {
             return Err<SafeTensorLoader>(ErrorCode::InvalidArgument,
                                          std::format("Tensor '{}' overlaps a previous tensor data range",
-                                                     parsed_tensor.metadata.name));
+                                                     metadata.name));
         }
 
-        previous_end = parsed_tensor.metadata.data_end;
+        previous_end = metadata.data_end;
 
-        const auto bytes = tensor_bytes(file_data, file_size, payload_offset, parsed_tensor.metadata);
-        if (bytes.empty() && parsed_tensor.metadata.byte_size() != 0) {
+        const auto bytes = tensor_bytes(file_data, file_size, payload_offset, metadata);
+        if (bytes.empty() && metadata.byte_size() != 0) {
             return Err<SafeTensorLoader>(
                 ErrorCode::InvalidArgument,
-                std::format("Tensor '{}' has an invalid byte view", parsed_tensor.metadata.name));
+                std::format("Tensor '{}' has an invalid byte view", metadata.name));
         }
 
-        auto tensor_result = build_tensor_from_bytes(parsed_tensor, bytes, device);
-        if (!tensor_result) {
-            return Err<SafeTensorLoader>(std::move(tensor_result.error()));
-        }
-
-        loader.tensor_metadata_.emplace(parsed_tensor.metadata.name, parsed_tensor.metadata);
-        loader.tensors_.emplace(parsed_tensor.metadata.name, std::move(tensor_result.value()));
+        loader.tensor_metadata_.emplace(metadata.name, metadata);
     }
 
     return Ok(std::move(loader));
 }
 
-const Tensor* SafeTensorLoader::find_tensor(std::string_view name) const noexcept {
-    const auto it = tensors_.find(std::string(name));
-    if (it == tensors_.end()) {
-        return nullptr;
+Result<Tensor> SafeTensorLoader::get_tensor(std::string_view name, DeviceType device) const {
+    const auto metadata_it = tensor_metadata_.find(name);
+    if (metadata_it == tensor_metadata_.end()) {
+        return Err<Tensor>(ErrorCode::InvalidArgument, std::format("Tensor '{}' not found", name));
     }
 
-    return std::addressof(it->second);
+    if (mmap_allocator_ == nullptr) {
+        return Err<Tensor>(ErrorCode::InvalidArgument, "SafeTensorLoader has no mapped file");
+    }
+
+    const auto* file_data = static_cast<const u8*>(mmap_allocator_->data());
+    const auto bytes = tensor_bytes(file_data, file_size_, payload_offset_, metadata_it->second);
+    if (bytes.empty() && metadata_it->second.byte_size() != 0) {
+        return Err<Tensor>(ErrorCode::InvalidArgument,
+                           std::format("Tensor '{}' has an invalid byte view", name));
+    }
+
+    return build_tensor_from_bytes(metadata_it->second, bytes, device);
 }
 
-const TensorMetadata* SafeTensorLoader::find_tensor_metadata(std::string_view name) const noexcept {
-    const auto it = tensor_metadata_.find(std::string(name));
-    if (it == tensor_metadata_.end()) {
-        return nullptr;
+std::vector<std::string> SafeTensorLoader::get_tensor_names() const {
+    std::vector<std::string> names;
+
+    names.reserve(tensor_metadata_.size());
+    for (const auto& [name, _] : tensor_metadata_) {
+        names.push_back(name);
     }
 
-    return std::addressof(it->second);
+    return names;
 }
 
 }  // namespace pulse

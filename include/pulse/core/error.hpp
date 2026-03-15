@@ -22,7 +22,9 @@ enum class ErrorCode : u32 {
     MmapError = 102,
 
     // Tensor errors (200-299)
-
+    ShapeMismatch = 200,
+    DeviceMismatch = 201,
+    DtypeMismatch = 202,
 
     // Model errors (300-399)
 
@@ -44,9 +46,9 @@ enum class ErrorCode : u32 {
 
 class Error {
 public:
-    constexpr Error() noexcept = default;
+    Error() noexcept = default;
 
-    constexpr explicit Error(ErrorCode code) noexcept : code_(code) {}
+    explicit Error(ErrorCode code) noexcept : code_(code) {}
 
     Error(ErrorCode code, std::string message) : code_(code), message_(std::move(message)) {}
 
@@ -192,26 +194,26 @@ private:
 
 /// Helper Functions
 template<typename T>
-[[nodiscard]] constexpr Result<T> Ok(T value) {
+[[nodiscard]] inline Result<T> Ok(T value) {
     return Result<T>(std::move(value));
 }
 
-[[nodiscard]] constexpr Result<void> Ok() {
+[[nodiscard]] inline Result<void> Ok() {
     return Result<void>();
 }
 
 template<typename T>
-[[nodiscard]] constexpr Result<T> Err(Error error) {
+[[nodiscard]] inline Result<T> Err(Error error) {
     return Result<T>(std::move(error));
 }
 
 template<typename T>
-[[nodiscard]] constexpr Result<T> Err(ErrorCode code) {
+[[nodiscard]] inline Result<T> Err(ErrorCode code) {
     return Result<T>(Error(code));
 }
 
 template<typename T>
-[[nodiscard]] constexpr Result<T> Err(ErrorCode code, std::string message) {
+[[nodiscard]] inline Result<T> Err(ErrorCode code, std::string message) {
     return Result<T>(Error(code, std::move(message)));
 }
 

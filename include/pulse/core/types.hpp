@@ -4,6 +4,7 @@
 #include <cstdint>
 
 #ifdef PULSE_USE_CUDA
+#include <cuda_fp16.h>
 #include <cuda_bf16.h>
 #endif
 
@@ -26,6 +27,7 @@ using f32 = float;
 using f64 = double;
 
 #ifdef PULSE_USE_CUDA
+using f16 = __half;
 using bf16 = __nv_bfloat16;
 #endif
 
@@ -178,6 +180,11 @@ struct CppTypeToDataType<f64> {
 };
 
 #ifdef PULSE_USE_CUDA
+template<>
+struct CppTypeToDataType<f16> {
+    static constexpr DataType value = DataType::Float16;
+};
+
 template<>
 struct CppTypeToDataType<bf16> {
     static constexpr DataType value = DataType::BFloat16;

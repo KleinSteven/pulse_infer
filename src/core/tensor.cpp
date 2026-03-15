@@ -3,6 +3,7 @@
 #include <numeric>
 #include <sstream>
 
+#include "pulse/ops/add.hpp"
 
 #ifdef PULSE_USE_CUDA
 #include <cuda_runtime.h>
@@ -124,6 +125,21 @@ Result<Tensor> Tensor::to(DeviceType device) const {
 #endif
 
     return Err<Tensor>(ErrorCode::InvalidArgument, "NotSupport this device");
+}
+
+Result<Tensor> Tensor::add(const Tensor& other) const {
+    auto output_result = Tensor::create(dims_, dtype_, device_);
+    if (!output_result) {
+        return Err<Tensor>(std::move(output_result.error()));
+    }
+
+    Tensor output(std::move(output_result.value()));
+    auto add_result = ops::add(*this, other, output);
+    if (!add_result) {
+        return Err<Tensor>(std::move(add_result.error()));
+    }
+
+    return Ok(std::move(output));
 }
 
 std::vector<usize> Tensor::stride() const {

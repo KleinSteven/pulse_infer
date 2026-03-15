@@ -253,6 +253,7 @@ TYPED_TEST(CudaBackedAllocatorTest, DeallocateRejectsHostPointer) {
     auto result = allocator.deallocate(&host_value, sizeof(host_value));
     EXPECT_TRUE(result.is_err());
     EXPECT_EQ(result.error().code(), ErrorCode::CudaError);
+    EXPECT_EQ(cudaPeekAtLastError(), cudaSuccess);
 }
 
 TYPED_TEST(CudaBackedAllocatorTest, MultipleAllocations) {

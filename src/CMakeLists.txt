@@ -5,8 +5,16 @@
 file(GLOB_RECURSE PULSE_CORE_SOURCES
   CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/core/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/ops/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/model/*.cpp
 )
+
+if(PULSE_BUILD_CUDA)
+  file(GLOB_RECURSE PULSE_CUDA_SOURCES
+    CONFIGURE_DEPENDS
+    ${CMAKE_CURRENT_SOURCE_DIR}/ops/kernels/cuda/*.cu
+  )
+endif()
 
 if(PULSE_BUILD_SHARED)
   add_library(pulse_core SHARED)
@@ -17,6 +25,7 @@ endif()
 target_sources(pulse_core
   PRIVATE
     ${PULSE_CORE_SOURCES}
+    ${PULSE_CUDA_SOURCES}
 )
 
 target_compile_options(pulse_core

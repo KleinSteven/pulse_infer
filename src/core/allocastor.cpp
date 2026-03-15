@@ -105,6 +105,7 @@ namespace pulse {
 
     if (err != cudaSuccess) {
         auto err_str = cudaGetErrorString(err);
+        (void)cudaGetLastError();
         auto str = std::format("cudaFree fali: {}", err_str);
         pulse::error("cudaFree fali: {}", err_str);
         return Err<void>(ErrorCode::CudaError, str);
@@ -142,6 +143,7 @@ namespace pulse {
 
     if (err != cudaSuccess) {
         auto err_str = cudaGetErrorString(err);
+        (void)cudaGetLastError();
         auto str = std::format("cudaFree fali: {}", err_str);
         pulse::error("cudaFree fali: {}", err_str);
         return Err<void>(ErrorCode::CudaError, str);

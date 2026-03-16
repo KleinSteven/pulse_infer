@@ -11,6 +11,7 @@ add_executable(pulse_tests
   core/test_tensor.cpp
   core/test_safetensor.cpp
   core/test_var_builder.cpp
+  layer/test_silu.cpp
   ops/test_add.cpp
   test_main.cpp
 )

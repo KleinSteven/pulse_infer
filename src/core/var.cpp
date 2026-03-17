@@ -261,6 +261,14 @@ Result<const Tensor*> VarBuilder::get(std::string_view name) const {
     return std::as_const(*var_map_).get(full_name);
 }
 
+const Tensor* VarBuilder::find(std::string_view name) const noexcept {
+    if (var_map_ == nullptr || name.empty()) {
+        return nullptr;
+    }
+
+    return std::as_const(*var_map_).find(join_name(prefix_, name));
+}
+
 Result<const Tensor*> VarBuilder::get(std::string_view name,
                                       const std::vector<i32>& dims,
                                       DataType dtype) const {

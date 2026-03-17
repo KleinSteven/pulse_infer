@@ -91,6 +91,45 @@ __global__ void add_bf16x8_pack_kernel(bf16* input1, bf16* input2, bf16* output,
   }
 }
 
+__global__ void add_bias_f32_kernel(const f32* bias, f32* output, i64 total_size, i32 cols) {
+  const i64 idx = threadIdx.x + static_cast<i64>(blockIdx.x) * blockDim.x;
+  if (idx >= total_size) {
+    return;
+  }
+
+  const i32 col = static_cast<i32>(idx % cols);
+  output[idx] += bias[col];
+}
+
+__global__ void add_bias_f64_kernel(const f64* bias, f64* output, i64 total_size, i32 cols) {
+  const i64 idx = threadIdx.x + static_cast<i64>(blockIdx.x) * blockDim.x;
+  if (idx >= total_size) {
+    return;
+  }
+
+  const i32 col = static_cast<i32>(idx % cols);
+  output[idx] += bias[col];
+}
+
+__global__ void add_bias_f16_kernel(const f16* bias, f16* output, i64 total_size, i32 cols) {
+  const i64 idx = threadIdx.x + static_cast<i64>(blockIdx.x) * blockDim.x;
+  if (idx >= total_size) {
+    return;
+  }
+
+  const i32 col = static_cast<i32>(idx % cols);
+  output[idx] = __float2half(__half2float(output[idx]) + __half2float(bias[col]));
+}
+
+__global__ void add_bias_bf16_kernel(const bf16* bias, bf16* output, i64 total_size, i32 cols) {
+  const i64 idx = threadIdx.x + static_cast<i64>(blockIdx.x) * blockDim.x;
+  if (idx >= total_size) {
+    return;
+  }
+
+  const i32 col = static_cast<i32>(idx % cols);
+  output[idx] = __float2bfloat16(__bfloat162float(output[idx]) + __bfloat162float(bias[col]));
+}
 
 
 Result<void> add_cuda_launch(
@@ -188,6 +227,73 @@ Result<void> add_cuda_launch(
     return Err<void>(ErrorCode::CudaError,
       std::format("CUDA add kernel execution failed for {}: {}",
         data_type_str(dtype), cudaGetErrorString(err)));
+  }
+
+  return Ok();
+}
+
+Result<void> add_bias_cuda_launch(const void* bias,
+                                  void* output,
+                                  i32 rows,
+                                  i32 cols,
+                                  DataType dtype,
+                                  cudaStream_t stream) {
+  if (rows <= 0 || cols <= 0) {
+    return Ok();
+  }
+
+  const i64 total_size = static_cast<i64>(rows) * static_cast<i64>(cols);
+  constexpr i32 thread_num = 256;
+  const i32 block_num = static_cast<i32>((total_size + thread_num - 1) / thread_num);
+
+  switch (dtype) {
+    case DataType::Float32:
+      LAUNCH_KERNEL(
+          add_bias_f32_kernel, block_num, thread_num, stream, (const f32*)bias, (f32*)output, total_size, cols);
+      break;
+    case DataType::Float64:
+      LAUNCH_KERNEL(
+          add_bias_f64_kernel, block_num, thread_num, stream, (const f64*)bias, (f64*)output, total_size, cols);
+      break;
+    case DataType::Float16:
+      LAUNCH_KERNEL(
+          add_bias_f16_kernel, block_num, thread_num, stream, (const f16*)bias, (f16*)output, total_size, cols);
+      break;
+    case DataType::BFloat16:
+      LAUNCH_KERNEL(add_bias_bf16_kernel,
+                    block_num,
+                    thread_num,
+                    stream,
+                    (const bf16*)bias,
+                    (bf16*)output,
+                    total_size,
+                    cols);
+      break;
+    default:
+      return Err<void>(ErrorCode::NotImplemented,
+                       "CUDA Linear bias only supports Float16/BFloat16/Float32/Float64");
+  }
+
+  cudaError_t err = cudaGetLastError();
+  if (err != cudaSuccess) {
+    pulse::error("CUDA linear bias kernel launch failed for {}: {}",
+                 data_type_str(dtype),
+                 cudaGetErrorString(err));
+    return Err<void>(ErrorCode::CudaError,
+                     std::format("CUDA linear bias kernel launch failed for {}: {}",
+                                 data_type_str(dtype),
+                                 cudaGetErrorString(err)));
+  }
+
+  err = stream == nullptr ? cudaDeviceSynchronize() : cudaStreamSynchronize(stream);
+  if (err != cudaSuccess) {
+    pulse::error("CUDA linear bias kernel execution failed for {}: {}",
+                 data_type_str(dtype),
+                 cudaGetErrorString(err));
+    return Err<void>(ErrorCode::CudaError,
+                     std::format("CUDA linear bias kernel execution failed for {}: {}",
+                                 data_type_str(dtype),
+                                 cudaGetErrorString(err)));
   }
 
   return Ok();

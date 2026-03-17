@@ -4,6 +4,7 @@
 #include <sstream>
 
 #include "pulse/ops/add.hpp"
+#include "pulse/ops/matmul.hpp"
 
 #ifdef PULSE_USE_CUDA
 #include <cuda_runtime.h>
@@ -137,6 +138,26 @@ Result<Tensor> Tensor::add(const Tensor& other) const {
     auto add_result = ops::add(*this, other, output);
     if (!add_result) {
         return Err<Tensor>(std::move(add_result.error()));
+    }
+
+    return Ok(std::move(output));
+}
+
+Result<Tensor> Tensor::matmul(const Tensor& other) const {
+    auto output_dims_result = ops::infer_matmul_output_dims(*this, other);
+    if (!output_dims_result) {
+        return Err<Tensor>(std::move(output_dims_result.error()));
+    }
+
+    auto output_result = Tensor::create(std::move(output_dims_result.value()), dtype_, device_);
+    if (!output_result) {
+        return Err<Tensor>(std::move(output_result.error()));
+    }
+
+    Tensor output(std::move(output_result.value()));
+    auto matmul_result = ops::matmul(*this, other, output);
+    if (!matmul_result) {
+        return Err<Tensor>(std::move(matmul_result.error()));
     }
 
     return Ok(std::move(output));

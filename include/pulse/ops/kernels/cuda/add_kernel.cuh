@@ -13,5 +13,12 @@ Result<void> add_cuda_launch(const void* input1,
                              i64 size,
                              DataType dtype,
                              cudaStream_t stream = nullptr);
+                             
+Result<void> add_bias_cuda_launch(const void* bias,
+                                  void* output,
+                                  i32 rows,
+                                  i32 cols,
+                                  DataType dtype,
+                                  cudaStream_t stream = nullptr);
 
 }  // namespace pulse::kernels::cuda

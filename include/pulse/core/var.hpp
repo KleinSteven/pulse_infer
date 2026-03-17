@@ -66,6 +66,7 @@ public:
     }
 
     [[nodiscard]] Result<const Tensor*> get(std::string_view name) const;
+    [[nodiscard]] const Tensor* find(std::string_view name) const noexcept;
 
     [[nodiscard]] Result<const Tensor*> get(std::string_view name,
                                             const std::vector<i32>& dims,

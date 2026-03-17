@@ -71,6 +71,7 @@ public:
     [[nodiscard]] Result<Tensor> to(DeviceType device) const;
 
     [[nodiscard]] Result<Tensor> add(const Tensor& other) const;
+    [[nodiscard]] Result<Tensor> matmul(const Tensor& other) const;
 
     [[nodiscard]] const Buffer& buffer() const noexcept {
         return buffer_;

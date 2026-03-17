@@ -72,6 +72,9 @@ public:
 
     [[nodiscard]] Result<Tensor> add(const Tensor& other) const;
     [[nodiscard]] Result<Tensor> matmul(const Tensor& other) const;
+    [[nodiscard]] Result<Tensor> rope(i32 position_offset = 0,
+                                      f32 theta = 10000.0f,
+                                      i32 rotary_dim = -1) const;
 
     [[nodiscard]] const Buffer& buffer() const noexcept {
         return buffer_;

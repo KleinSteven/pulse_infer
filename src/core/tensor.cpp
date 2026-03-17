@@ -5,6 +5,7 @@
 
 #include "pulse/ops/add.hpp"
 #include "pulse/ops/matmul.hpp"
+#include "pulse/ops/rope.hpp"
 
 #ifdef PULSE_USE_CUDA
 #include <cuda_runtime.h>
@@ -158,6 +159,21 @@ Result<Tensor> Tensor::matmul(const Tensor& other) const {
     auto matmul_result = ops::matmul(*this, other, output);
     if (!matmul_result) {
         return Err<Tensor>(std::move(matmul_result.error()));
+    }
+
+    return Ok(std::move(output));
+}
+
+Result<Tensor> Tensor::rope(i32 position_offset, f32 theta, i32 rotary_dim) const {
+    auto output_result = Tensor::create(dims_, dtype_, device_);
+    if (!output_result) {
+        return Err<Tensor>(std::move(output_result.error()));
+    }
+
+    Tensor output(std::move(output_result.value()));
+    auto rope_result = ops::rope(*this, output, position_offset, theta, rotary_dim);
+    if (!rope_result) {
+        return Err<Tensor>(std::move(rope_result.error()));
     }
 
     return Ok(std::move(output));

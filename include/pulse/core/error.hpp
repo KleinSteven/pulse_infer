@@ -30,7 +30,7 @@ enum class ErrorCode : u32 {
 
 
     // Operator errors (400-499)
-
+    InvalidOperator = 400,
 
     // CUDA errors (500-599)
     CudaError = 500,

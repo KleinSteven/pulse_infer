@@ -209,14 +209,14 @@ TEST(SiLULayerTest, AppliesFloat32TensorAndReturnsNewTensor) {
     expect_values_eq(input.tensor.ptr<f32>(), input.values);
 }
 
-TEST(SiLULayerTest, OperatorCallForwardsToForward) {
+TEST(SiLULayerTest, ForwardAppliesActivation) {
     const std::vector<i32> dims{2, 2, 3};
     auto input = make_random_tensor_or_fail<f64>(dims, DeviceType::CPU, 202);
     assert_tensor_created(input);
     auto expected = silu_expected(input.values);
 
     layer::SiLU silu;
-    auto silu_result = silu(input.tensor);
+    auto silu_result = silu.forward(input.tensor);
 
     ASSERT_TRUE(silu_result.is_ok()) << silu_result.error().message();
     Tensor output = std::move(silu_result.value());

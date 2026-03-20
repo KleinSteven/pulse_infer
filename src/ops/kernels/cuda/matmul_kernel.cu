@@ -18,6 +18,21 @@ Result<void> cublas_error(cublasStatus_t status, std::string_view action) {
                                cublasGetStatusString(status)));
 }
 
+Result<cublasHandle_t> get_cublas_handle() {
+  static thread_local cublasHandle_t handle = nullptr;
+  if (handle == nullptr) {
+    cublasStatus_t status = cublasCreate(&handle);
+    if (status != CUBLAS_STATUS_SUCCESS) {
+      return Err<cublasHandle_t>(ErrorCode::CudaError,
+                                 std::format("cuBLAS create failed: {} ({})",
+                                             cublasGetStatusName(status),
+                                             cublasGetStatusString(status)));
+    }
+  }
+
+  return Ok(handle);
+}
+
 }  // namespace
 
 Result<void> matmul_cuda_launch(const void* input1,
@@ -34,15 +49,14 @@ Result<void> matmul_cuda_launch(const void* input1,
     return Ok();
   }
 
-  cublasHandle_t handle = nullptr;
-  cublasStatus_t status = cublasCreate(&handle);
-  if (status != CUBLAS_STATUS_SUCCESS) {
-    return cublas_error(status, "create");
+  auto handle_result = get_cublas_handle();
+  if (!handle_result) {
+    return Err<void>(std::move(handle_result.error()));
   }
+  cublasHandle_t handle = handle_result.value();
 
-  status = cublasSetStream(handle, stream);
+  cublasStatus_t status = cublasSetStream(handle, stream);
   if (status != CUBLAS_STATUS_SUCCESS) {
-    cublasDestroy(handle);
     return cublas_error(status, "set stream");
   }
 
@@ -140,31 +154,12 @@ Result<void> matmul_cuda_launch(const void* input1,
       break;
     }
     default:
-      cublasDestroy(handle);
       return Err<void>(ErrorCode::NotImplemented,
                        "CUDA Matmul only supports Float16/BFloat16/Float32/Float64");
   }
 
   if (status != CUBLAS_STATUS_SUCCESS) {
-    cublasDestroy(handle);
     return cublas_error(status, "gemm");
-  }
-
-  cudaError_t err = stream == nullptr ? cudaDeviceSynchronize() : cudaStreamSynchronize(stream);
-  if (err != cudaSuccess) {
-    cublasDestroy(handle);
-    pulse::error("CUDA matmul synchronization failed for {}: {}",
-                 data_type_str(dtype),
-                 cudaGetErrorString(err));
-    return Err<void>(ErrorCode::CudaError,
-                     std::format("CUDA matmul synchronization failed for {}: {}",
-                                 data_type_str(dtype),
-                                 cudaGetErrorString(err)));
-  }
-
-  status = cublasDestroy(handle);
-  if (status != CUBLAS_STATUS_SUCCESS) {
-    return cublas_error(status, "destroy");
   }
 
   return Ok();

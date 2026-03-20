@@ -260,6 +260,60 @@ TEST(MHAOpTest, RejectsQuerySizeThatDoesNotMatchHeadLayout) {
 
 #ifdef PULSE_USE_CUDA
 
+template<typename T>
+std::vector<T> cuda_float_vector(const std::vector<f32>& values);
+
+template<>
+std::vector<f32> cuda_float_vector<f32>(const std::vector<f32>& values) {
+    return values;
+}
+
+template<>
+std::vector<f16> cuda_float_vector<f16>(const std::vector<f32>& values) {
+    std::vector<f16> converted;
+    converted.reserve(values.size());
+    for (f32 value : values) {
+        converted.push_back(__float2half(value));
+    }
+    return converted;
+}
+
+template<>
+std::vector<bf16> cuda_float_vector<bf16>(const std::vector<f32>& values) {
+    std::vector<bf16> converted;
+    converted.reserve(values.size());
+    for (f32 value : values) {
+        converted.push_back(__float2bfloat16(value));
+    }
+    return converted;
+}
+
+template<typename T>
+double cuda_scalar_to_double(T value);
+
+template<>
+double cuda_scalar_to_double<f32>(f32 value) {
+    return static_cast<double>(value);
+}
+
+template<>
+double cuda_scalar_to_double<f16>(f16 value) {
+    return static_cast<double>(__half2float(value));
+}
+
+template<>
+double cuda_scalar_to_double<bf16>(bf16 value) {
+    return static_cast<double>(__bfloat162float(value));
+}
+
+template<typename T>
+void expect_cuda_host_values_near(const T* actual, const std::vector<double>& expected, double tolerance) {
+    ASSERT_NE(actual, nullptr);
+    for (usize i = 0; i < expected.size(); ++i) {
+        EXPECT_NEAR(cuda_scalar_to_double(actual[i]), expected[i], tolerance);
+    }
+}
+
 TEST(MHAOpTest, OpsMhaAppliesFloat32Cuda) {
     constexpr i32 head_num = 2;
     constexpr i32 head_size = 2;
@@ -301,6 +355,96 @@ TEST(MHAOpTest, OpsMhaAppliesFloat32Cuda) {
     ASSERT_TRUE(host_result.is_ok()) << host_result.error().message();
     Tensor host_output = std::move(host_result.value());
     expect_values_near(host_output.ptr<f32>(), expected, 1e-4);
+}
+
+TEST(MHAOpTest, OpsMhaAppliesFloat16Cuda) {
+    constexpr i32 head_num = 2;
+    constexpr i32 head_size = 2;
+    constexpr i32 dim = head_num * head_size;
+    constexpr i32 kv_dim = dim;
+    constexpr i32 seq_len = 3;
+    constexpr i32 pos = 1;
+
+    const std::vector<f32> query_values{1.0f, 0.0f, 0.0f, 1.0f};
+    const std::vector<f32> key_values{
+        1.0f, 0.0f, 0.0f, 1.0f,
+        0.0f, 1.0f, 1.0f, 0.0f,
+        1.0f, 1.0f, 1.0f, 1.0f,
+    };
+    const std::vector<f32> value_values{
+        2.0f, 3.0f, 4.0f, 5.0f,
+        6.0f, 7.0f, 8.0f, 9.0f,
+        0.0f, 0.0f, 0.0f, 0.0f,
+    };
+
+    auto query = make_tensor_or_fail<f16>({dim}, cuda_float_vector<f16>(query_values), DeviceType::CUDA);
+    if (query.tensor.empty()) {
+        GTEST_SKIP() << "CUDA tensor creation failed";
+    }
+    auto key_cache =
+        make_tensor_or_fail<f16>({seq_len, kv_dim}, cuda_float_vector<f16>(key_values), DeviceType::CUDA);
+    ASSERT_FALSE(key_cache.tensor.empty());
+    auto value_cache =
+        make_tensor_or_fail<f16>({seq_len, kv_dim}, cuda_float_vector<f16>(value_values), DeviceType::CUDA);
+    ASSERT_FALSE(value_cache.tensor.empty());
+    auto output_result = Tensor::create({dim}, DataType::Float16, DeviceType::CUDA);
+    ASSERT_TRUE(output_result.is_ok()) << output_result.error().message();
+    Tensor output(std::move(output_result.value()));
+    const auto expected =
+        mha_expected(query_values, key_values, value_values, pos, kv_dim, head_num, head_size);
+
+    auto mha_result = ops::mha(query.tensor, key_cache.tensor, value_cache.tensor, output, pos, head_num, head_size);
+
+    ASSERT_TRUE(mha_result.is_ok()) << mha_result.error().message();
+    auto host_result = output.to(DeviceType::CPU);
+    ASSERT_TRUE(host_result.is_ok()) << host_result.error().message();
+    Tensor host_output = std::move(host_result.value());
+    expect_cuda_host_values_near(host_output.ptr<f16>(), expected, 2e-2);
+}
+
+TEST(MHAOpTest, OpsMhaAppliesBFloat16Cuda) {
+    constexpr i32 head_num = 2;
+    constexpr i32 head_size = 2;
+    constexpr i32 dim = head_num * head_size;
+    constexpr i32 kv_dim = dim;
+    constexpr i32 seq_len = 3;
+    constexpr i32 pos = 1;
+
+    const std::vector<f32> query_values{1.0f, 0.0f, 0.0f, 1.0f};
+    const std::vector<f32> key_values{
+        1.0f, 0.0f, 0.0f, 1.0f,
+        0.0f, 1.0f, 1.0f, 0.0f,
+        1.0f, 1.0f, 1.0f, 1.0f,
+    };
+    const std::vector<f32> value_values{
+        2.0f, 3.0f, 4.0f, 5.0f,
+        6.0f, 7.0f, 8.0f, 9.0f,
+        0.0f, 0.0f, 0.0f, 0.0f,
+    };
+
+    auto query = make_tensor_or_fail<bf16>({dim}, cuda_float_vector<bf16>(query_values), DeviceType::CUDA);
+    if (query.tensor.empty()) {
+        GTEST_SKIP() << "CUDA tensor creation failed";
+    }
+    auto key_cache =
+        make_tensor_or_fail<bf16>({seq_len, kv_dim}, cuda_float_vector<bf16>(key_values), DeviceType::CUDA);
+    ASSERT_FALSE(key_cache.tensor.empty());
+    auto value_cache =
+        make_tensor_or_fail<bf16>({seq_len, kv_dim}, cuda_float_vector<bf16>(value_values), DeviceType::CUDA);
+    ASSERT_FALSE(value_cache.tensor.empty());
+    auto output_result = Tensor::create({dim}, DataType::BFloat16, DeviceType::CUDA);
+    ASSERT_TRUE(output_result.is_ok()) << output_result.error().message();
+    Tensor output(std::move(output_result.value()));
+    const auto expected =
+        mha_expected(query_values, key_values, value_values, pos, kv_dim, head_num, head_size);
+
+    auto mha_result = ops::mha(query.tensor, key_cache.tensor, value_cache.tensor, output, pos, head_num, head_size);
+
+    ASSERT_TRUE(mha_result.is_ok()) << mha_result.error().message();
+    auto host_result = output.to(DeviceType::CPU);
+    ASSERT_TRUE(host_result.is_ok()) << host_result.error().message();
+    Tensor host_output = std::move(host_result.value());
+    expect_cuda_host_values_near(host_output.ptr<bf16>(), expected, 5e-2);
 }
 
 #endif

@@ -214,21 +214,6 @@ Result<void> add_cuda_launch(
         data_type_str(dtype), cudaGetErrorString(err)));
   }
 
-  if (stream == nullptr) {
-    err = cudaDeviceSynchronize();
-  } else {
-    err = cudaStreamSynchronize(stream);
-  }
-
-  if (err != cudaSuccess) {
-    pulse::error("CUDA add kernel execution failed for {}: {}",
-                 data_type_str(dtype),
-                 cudaGetErrorString(err));
-    return Err<void>(ErrorCode::CudaError,
-      std::format("CUDA add kernel execution failed for {}: {}",
-        data_type_str(dtype), cudaGetErrorString(err)));
-  }
-
   return Ok();
 }
 
@@ -281,17 +266,6 @@ Result<void> add_bias_cuda_launch(const void* bias,
                  cudaGetErrorString(err));
     return Err<void>(ErrorCode::CudaError,
                      std::format("CUDA linear bias kernel launch failed for {}: {}",
-                                 data_type_str(dtype),
-                                 cudaGetErrorString(err)));
-  }
-
-  err = stream == nullptr ? cudaDeviceSynchronize() : cudaStreamSynchronize(stream);
-  if (err != cudaSuccess) {
-    pulse::error("CUDA linear bias kernel execution failed for {}: {}",
-                 data_type_str(dtype),
-                 cudaGetErrorString(err));
-    return Err<void>(ErrorCode::CudaError,
-                     std::format("CUDA linear bias kernel execution failed for {}: {}",
                                  data_type_str(dtype),
                                  cudaGetErrorString(err)));
   }

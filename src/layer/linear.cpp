@@ -163,21 +163,66 @@ Result<Tensor> Linear::forward(const Tensor& input) const {
     }
 
     Tensor output(std::move(output_result.value()));
+    auto forward_result = forward(input, output);
+    if (!forward_result) {
+        return Err<Tensor>(std::move(forward_result.error()));
+    }
+
+    return Ok(std::move(output));
+}
+
+Result<void> Linear::forward(const Tensor& input, Tensor& output) const {
+    if (weight_ == nullptr) {
+        return Err<void>(ErrorCode::InvalidArgument, "Linear layer is not initialized");
+    }
+
+    if (input.empty()) {
+        return Err<void>(ErrorCode::InvalidArgument, "Linear input tensor is empty");
+    }
+
+    if (input.ndim() != 2) {
+        return Err<void>(ErrorCode::InvalidArgument, "Linear only supports 2D input tensors");
+    }
+
+    if (input.device() != weight_->device()) {
+        return Err<void>(ErrorCode::DeviceMismatch, "Linear input device mismatch");
+    }
+
+    if (input.dtype() != weight_->dtype()) {
+        return Err<void>(ErrorCode::DtypeMismatch, "Linear input dtype mismatch");
+    }
+
+    if (input.dim(1) != weight_->dim(1)) {
+        return Err<void>(ErrorCode::ShapeMismatch, "Linear input shape mismatch");
+    }
+
+    if (output.dims() != std::vector<i32>{input.dim(0), weight_->dim(0)}) {
+        return Err<void>(ErrorCode::ShapeMismatch, "Linear output shape mismatch");
+    }
+
+    if (output.device() != input.device()) {
+        return Err<void>(ErrorCode::DeviceMismatch, "Linear output device mismatch");
+    }
+
+    if (output.dtype() != input.dtype()) {
+        return Err<void>(ErrorCode::DtypeMismatch, "Linear output dtype mismatch");
+    }
+
     const Tensor* bias = has_bias_ ? bias_ : nullptr;
 
     auto matmul_result = ops::matmul(input, *weight_, output, false, true);
     if (!matmul_result) {
-        return Err<Tensor>(std::move(matmul_result.error()));
+        return Err<void>(std::move(matmul_result.error()));
     }
 
     if (bias != nullptr) {
         auto bias_result = add_bias_inplace(*bias, output);
         if (!bias_result) {
-            return Err<Tensor>(std::move(bias_result.error()));
+            return Err<void>(std::move(bias_result.error()));
         }
     }
 
-    return Ok(std::move(output));
+    return Ok();
 }
 
 }  // namespace pulse::layer

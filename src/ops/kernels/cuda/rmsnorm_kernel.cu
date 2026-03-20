@@ -230,23 +230,6 @@ Result<void> rms_norm_cuda_launch(const void* input,
                                      cudaGetErrorString(err)));
     }
 
-    // TODO: support true multi-stream/asynchronous execution without forcing stream sync here.
-    if (stream == nullptr) {
-        err = cudaDeviceSynchronize();
-    } else {
-        err = cudaStreamSynchronize(stream);
-    }
-
-    if (err != cudaSuccess) {
-        pulse::error("CUDA rmsnorm kernel execution failed for {}: {}",
-                     data_type_str(dtype),
-                     cudaGetErrorString(err));
-        return Err<void>(ErrorCode::CudaError,
-                         std::format("CUDA rmsnorm kernel execution failed for {}: {}",
-                                     data_type_str(dtype),
-                                     cudaGetErrorString(err)));
-    }
-
     return Ok();
 }
 

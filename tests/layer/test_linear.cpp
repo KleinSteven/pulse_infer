@@ -320,7 +320,7 @@ TEST(LinearLayerTest, CreateWithVarBuilderOperatorCallAppliesFloat64TensorWithou
     auto expected =
         linear_expected(input.values, weight_values, static_cast<const std::vector<f64>*>(nullptr), 3, 2, 5);
 
-    auto forward_result = linear(input.tensor);
+    auto forward_result = linear.forward(input.tensor);
 
     ASSERT_TRUE(forward_result.is_ok()) << forward_result.error().message();
     Tensor output = std::move(forward_result.value());

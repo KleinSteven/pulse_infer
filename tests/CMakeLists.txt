@@ -11,12 +11,14 @@ add_executable(pulse_tests
   core/test_tensor.cpp
   core/test_safetensor.cpp
   core/test_var_builder.cpp
+  layer/test_embedding.cpp
   layer/test_linear.cpp
   layer/test_rmsnorm.cpp
   layer/test_silu.cpp
   ops/test_add.cpp
   ops/test_matmul.cpp
   ops/test_mha.cpp
+  ops/test_mul.cpp
   ops/test_rmsnorm.cpp
   ops/test_rope.cpp
   test_main.cpp

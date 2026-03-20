@@ -194,6 +194,18 @@ Result<void> VarMap::insert(std::string name, Tensor tensor) {
     return Ok();
 }
 
+Result<void> VarMap::append(VarMap&& other) {
+    for (auto it = other.tensors_.begin(); it != other.tensors_.end(); ++it) {
+        if (contains(it->first)) {
+            return Err<void>(ErrorCode::InvalidArgument,
+                             std::format("Tensor '{}' already exists", it->first));
+        }
+    }
+
+    tensors_.merge(other.tensors_);
+    return Ok();
+}
+
 Result<Tensor*>
 VarMap::get_or_create(std::string name, std::vector<i32> dims, DataType dtype, DeviceType device) {
     auto validate_result = validate_name(name);

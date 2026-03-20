@@ -44,6 +44,8 @@ public:
 
     [[nodiscard]] Result<void> insert(std::string name, Tensor tensor);
 
+    [[nodiscard]] Result<void> append(VarMap&& other);
+
     [[nodiscard]] Result<Tensor*> get_or_create(std::string name,
                                                 std::vector<i32> dims,
                                                 DataType dtype,

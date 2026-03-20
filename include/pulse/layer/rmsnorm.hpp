@@ -18,11 +18,8 @@ public:
 
     [[nodiscard]] Result<void> init(const VarBuilder& builder);
 
+    [[nodiscard]] Result<void> forward(const Tensor& input, Tensor& output) const;
     [[nodiscard]] Result<Tensor> forward(const Tensor& input) const;
-
-    [[nodiscard]] Result<Tensor> operator()(const Tensor& input) const {
-        return forward(input);
-    }
 
     [[nodiscard]] const std::vector<i32>& normalized_shape() const noexcept {
         return normalized_shape_;

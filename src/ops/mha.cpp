@@ -15,12 +15,13 @@ namespace {
 Result<void> validate_mha_inputs(const Tensor& query,
                                  const Tensor& key_cache,
                                  const Tensor& value_cache,
+                                 const Tensor& score,
                                  const Tensor& output,
                                  i32 pos,
                                  i32 head_num,
                                  i32 head_size) {
     if (query.device() != key_cache.device() || query.device() != value_cache.device() ||
-        query.device() != output.device()) {
+        query.device() != score.device() || query.device() != output.device()) {
         return Err<void>(ErrorCode::DeviceMismatch, "All tensors must be on the same device");
     }
 
@@ -38,6 +39,10 @@ Result<void> validate_mha_inputs(const Tensor& query,
 
     if (output.empty()) {
         return Err<void>(ErrorCode::InvalidArgument, "Output tensor is empty");
+    }
+
+    if (score.empty()) {
+        return Err<void>(ErrorCode::InvalidArgument, "Score tensor is empty");
     }
 
     if (head_num <= 0 || head_size <= 0) {
@@ -62,6 +67,12 @@ Result<void> validate_mha_inputs(const Tensor& query,
 
     if (query.dtype() != output.dtype()) {
         return Err<void>(ErrorCode::DtypeMismatch, "Output tensor dtype mismatch");
+    }
+
+    const DataType expected_score_dtype =
+        query.device() == DeviceType::CUDA ? DataType::Float32 : query.dtype();
+    if (score.dtype() != expected_score_dtype) {
+        return Err<void>(ErrorCode::DtypeMismatch, "Score tensor dtype mismatch");
     }
 
     const i64 expected_query_size = static_cast<i64>(head_num) * static_cast<i64>(head_size);
@@ -90,6 +101,10 @@ Result<void> validate_mha_inputs(const Tensor& query,
     const i32 kv_head_num = kv_dim / head_size;
     if (kv_head_num <= 0 || (head_num % kv_head_num) != 0) {
         return Err<void>(ErrorCode::ShapeMismatch, "head_num must be divisible by kv_head_num");
+    }
+
+    if (score.dims() != std::vector<i32>{head_num, seq_len}) {
+        return Err<void>(ErrorCode::ShapeMismatch, "Score tensor shape mismatch");
     }
 
     return Ok();
@@ -132,11 +147,13 @@ Result<void> mha_cpu(const Tensor& query,
 Result<void> mha(const Tensor& query,
                  const Tensor& key_cache,
                  const Tensor& value_cache,
+                 Tensor& score,
                  Tensor& output,
                  i32 pos,
                  i32 head_num,
                  i32 head_size) {
-    auto validation = validate_mha_inputs(query, key_cache, value_cache, output, pos, head_num, head_size);
+    auto validation =
+        validate_mha_inputs(query, key_cache, value_cache, score, output, pos, head_num, head_size);
     if (!validation) {
         return validation;
     }
@@ -144,12 +161,6 @@ Result<void> mha(const Tensor& query,
     const i32 seq_len = key_cache.dim(0);
     const i32 kv_dim = key_cache.dim(1);
     const i32 kv_mul = head_num / (kv_dim / head_size);
-
-    auto score_result = Tensor::create({head_num, seq_len}, query.dtype(), query.device());
-    if (!score_result) {
-        return Err<void>(std::move(score_result.error()));
-    }
-    Tensor score(std::move(score_result.value()));
 
     if (query.device() == DeviceType::CPU) {
         if (query.dtype() == DataType::Float32) {
@@ -182,6 +193,23 @@ Result<void> mha(const Tensor& query,
 #endif
 
     return Err<void>(ErrorCode::NotImplemented, "MHA operation not implemented for this device");
+}
+
+Result<void> mha(const Tensor& query,
+                 const Tensor& key_cache,
+                 const Tensor& value_cache,
+                 Tensor& output,
+                 i32 pos,
+                 i32 head_num,
+                 i32 head_size) {
+    const i32 seq_len = key_cache.dim(0);
+    const DataType score_dtype = query.device() == DeviceType::CUDA ? DataType::Float32 : query.dtype();
+    auto score_result = Tensor::create({head_num, seq_len}, score_dtype, query.device());
+    if (!score_result) {
+        return Err<void>(std::move(score_result.error()));
+    }
+    Tensor score(std::move(score_result.value()));
+    return mha(query, key_cache, value_cache, score, output, pos, head_num, head_size);
 }
 
 }  // namespace pulse::ops

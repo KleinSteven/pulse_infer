@@ -9,6 +9,15 @@ namespace pulse::ops {
 [[nodiscard]] Result<void> mha(const Tensor& query,
                                const Tensor& key_cache,
                                const Tensor& value_cache,
+                               Tensor& score,
+                               Tensor& output,
+                               i32 pos,
+                               i32 head_num,
+                               i32 head_size);
+
+[[nodiscard]] Result<void> mha(const Tensor& query,
+                               const Tensor& key_cache,
+                               const Tensor& value_cache,
                                Tensor& output,
                                i32 pos,
                                i32 head_num,

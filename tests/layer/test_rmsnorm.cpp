@@ -175,7 +175,7 @@ TEST(RMSNormLayerTest, ForwardWithoutAffineDoesNotRequireInit) {
     layer::RMSNorm norm(normalized_shape, 1.0e-12, false, DeviceType::CPU, DataType::Float64);
     auto expected = rms_norm_expected(input.values, static_cast<const std::vector<f64>*>(nullptr), input_dims, normalized_shape, norm.eps());
 
-    auto forward_result = norm(input.tensor);
+    auto forward_result = norm.forward(input.tensor);
 
     ASSERT_TRUE(forward_result.is_ok()) << forward_result.error().message();
     Tensor output = std::move(forward_result.value());

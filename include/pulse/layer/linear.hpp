@@ -21,11 +21,8 @@ public:
     Linear(Linear&&) = default;
     Linear& operator=(Linear&&) = default;
 
+    [[nodiscard]] Result<void> forward(const Tensor& input, Tensor& output) const;
     [[nodiscard]] Result<Tensor> forward(const Tensor& input) const;
-
-    [[nodiscard]] Result<Tensor> operator()(const Tensor& input) const {
-        return forward(input);
-    }
 
     [[nodiscard]] const Tensor* weight() const noexcept {
         return weight_;

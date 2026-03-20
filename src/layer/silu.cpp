@@ -11,12 +11,21 @@ Result<Tensor> SiLU::forward(const Tensor& input) const {
     }
 
     Tensor output(std::move(output_result.value()));
-    auto silu_result = ops::silu(input, output);
-    if (!silu_result) {
-        return Err<Tensor>(std::move(silu_result.error()));
+    auto forward_result = forward(input, output);
+    if (!forward_result) {
+        return Err<Tensor>(std::move(forward_result.error()));
     }
 
     return Ok(std::move(output));
+}
+
+Result<void> SiLU::forward(const Tensor& input, Tensor& output) const {
+    auto silu_result = ops::silu(input, output);
+    if (!silu_result) {
+        return Err<void>(std::move(silu_result.error()));
+    }
+
+    return Ok();
 }
 
 }  // namespace pulse::layer

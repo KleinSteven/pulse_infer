@@ -88,51 +88,72 @@ Result<void> RMSNorm::init(const VarBuilder& builder) {
 }
 
 Result<Tensor> RMSNorm::forward(const Tensor& input) const {
-    if (normalized_shape_.empty()) {
-        return Err<Tensor>(ErrorCode::InvalidArgument, "RMSNorm normalized_shape cannot be empty");
-    }
-
-    if (input.empty()) {
-        return Err<Tensor>(ErrorCode::InvalidArgument, "RMSNorm input tensor is empty");
-    }
-
-    if (input.device() != device_) {
-        return Err<Tensor>(ErrorCode::DeviceMismatch, "RMSNorm input device mismatch");
-    }
-
-    if (input.dtype() != dtype_) {
-        return Err<Tensor>(ErrorCode::DtypeMismatch, "RMSNorm input dtype mismatch");
-    }
-
-    if (input.ndim() < static_cast<i32>(normalized_shape_.size())) {
-        return Err<Tensor>(ErrorCode::ShapeMismatch, "RMSNorm input rank is smaller than normalized_shape");
-    }
-
-    const auto input_rank = static_cast<usize>(input.ndim());
-    const auto norm_rank = normalized_shape_.size();
-    for (usize i = 0; i < norm_rank; ++i) {
-        if (input.dim(static_cast<i32>(input_rank - norm_rank + i)) != normalized_shape_[i]) {
-            return Err<Tensor>(ErrorCode::ShapeMismatch, "RMSNorm input suffix shape mismatch");
-        }
-    }
-
-    if (elementwise_affine_ && weight_ == nullptr) {
-        return Err<Tensor>(ErrorCode::InvalidArgument, "RMSNorm layer is not initialized");
-    }
-
     auto output_result = Tensor::create(input.dims(), input.dtype(), input.device());
     if (!output_result) {
         return Err<Tensor>(std::move(output_result.error()));
     }
 
     Tensor output(std::move(output_result.value()));
-    auto norm_result = ops::rms_norm(
-        input, normalized_shape_, elementwise_affine_ ? weight_ : nullptr, output, eps_);
-    if (!norm_result) {
-        return Err<Tensor>(std::move(norm_result.error()));
+    auto forward_result = forward(input, output);
+    if (!forward_result) {
+        return Err<Tensor>(std::move(forward_result.error()));
     }
 
     return Ok(std::move(output));
+}
+
+Result<void> RMSNorm::forward(const Tensor& input, Tensor& output) const {
+    if (normalized_shape_.empty()) {
+        return Err<void>(ErrorCode::InvalidArgument, "RMSNorm normalized_shape cannot be empty");
+    }
+
+    if (input.empty()) {
+        return Err<void>(ErrorCode::InvalidArgument, "RMSNorm input tensor is empty");
+    }
+
+    if (input.device() != device_) {
+        return Err<void>(ErrorCode::DeviceMismatch, "RMSNorm input device mismatch");
+    }
+
+    if (input.dtype() != dtype_) {
+        return Err<void>(ErrorCode::DtypeMismatch, "RMSNorm input dtype mismatch");
+    }
+
+    if (input.ndim() < static_cast<i32>(normalized_shape_.size())) {
+        return Err<void>(ErrorCode::ShapeMismatch, "RMSNorm input rank is smaller than normalized_shape");
+    }
+
+    const auto input_rank = static_cast<usize>(input.ndim());
+    const auto norm_rank = normalized_shape_.size();
+    for (usize i = 0; i < norm_rank; ++i) {
+        if (input.dim(static_cast<i32>(input_rank - norm_rank + i)) != normalized_shape_[i]) {
+            return Err<void>(ErrorCode::ShapeMismatch, "RMSNorm input suffix shape mismatch");
+        }
+    }
+
+    if (elementwise_affine_ && weight_ == nullptr) {
+        return Err<void>(ErrorCode::InvalidArgument, "RMSNorm layer is not initialized");
+    }
+
+    if (output.dims() != input.dims()) {
+        return Err<void>(ErrorCode::ShapeMismatch, "RMSNorm output shape mismatch");
+    }
+
+    if (output.device() != input.device()) {
+        return Err<void>(ErrorCode::DeviceMismatch, "RMSNorm output device mismatch");
+    }
+
+    if (output.dtype() != input.dtype()) {
+        return Err<void>(ErrorCode::DtypeMismatch, "RMSNorm output dtype mismatch");
+    }
+
+    auto norm_result = ops::rms_norm(
+        input, normalized_shape_, elementwise_affine_ ? weight_ : nullptr, output, eps_);
+    if (!norm_result) {
+        return Err<void>(std::move(norm_result.error()));
+    }
+
+    return Ok();
 }
 
 }  // namespace pulse::layer

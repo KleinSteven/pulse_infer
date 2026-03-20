@@ -171,22 +171,6 @@ Result<void> silu_cuda_launch(const void* input,
                                  cudaGetErrorString(err)));
   }
 
-  if (stream == nullptr) {
-    err = cudaDeviceSynchronize();
-  } else {
-    err = cudaStreamSynchronize(stream);
-  }
-
-  if (err != cudaSuccess) {
-    pulse::error("CUDA silu kernel execution failed for {}: {}",
-                 data_type_str(dtype),
-                 cudaGetErrorString(err));
-    return Err<void>(ErrorCode::CudaError,
-                     std::format("CUDA silu kernel execution failed for {}: {}",
-                                 data_type_str(dtype),
-                                 cudaGetErrorString(err)));
-  }
-
   return Ok();
 }
 

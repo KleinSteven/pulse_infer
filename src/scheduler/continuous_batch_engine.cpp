@@ -26,6 +26,7 @@ i32 argmax_token(const Tensor& logits) {
 
     i32 best_index = 0;
     f32 best_value = 0.0f;
+#ifdef PULSE_USE_CUDA
     if constexpr (std::is_same_v<T, f16>) {
         best_value = __half2float(logits_ptr[0]);
     } else if constexpr (std::is_same_v<T, bf16>) {
@@ -33,9 +34,13 @@ i32 argmax_token(const Tensor& logits) {
     } else {
         best_value = static_cast<f32>(logits_ptr[0]);
     }
+#else
+    best_value = static_cast<f32>(logits_ptr[0]);
+#endif
 
     for (usize index = 1; index < logits.size(); ++index) {
         f32 value = 0.0f;
+#ifdef PULSE_USE_CUDA
         if constexpr (std::is_same_v<T, f16>) {
             value = __half2float(logits_ptr[index]);
         } else if constexpr (std::is_same_v<T, bf16>) {
@@ -43,6 +48,9 @@ i32 argmax_token(const Tensor& logits) {
         } else {
             value = static_cast<f32>(logits_ptr[index]);
         }
+#else
+        value = static_cast<f32>(logits_ptr[index]);
+#endif
 
         if (value > best_value) {
             best_value = value;

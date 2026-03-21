@@ -55,7 +55,7 @@ public:
 
         i32 remaining_capacity = max_batch_size_ - batch.batch_size();
 
-        i32 available_slots = max_sequences_ - num_active_sequences();
+        i32 available_slots = max_sequences_ - num_running();
 
         while (remaining_capacity > 0 && available_slots > 0 && !waiting_queue_.empty()) {
             auto req = waiting_queue_.front();
@@ -102,7 +102,7 @@ public:
     }
 
     [[nodiscard]] i32 num_active_sequences() const noexcept {
-        return static_cast<i32>(running_requests_.size() + waiting_queue_.size());
+        return num_running();
     }
 
     [[nodiscard]] i32 num_running() const noexcept {

@@ -127,6 +127,7 @@ std::vector<double> rms_norm_expected(const std::vector<T>& input,
         double sum_squares = 0.0;
         for (usize col = 0; col < normalized_size; ++col) {
             double value = 0.0;
+#ifdef PULSE_USE_CUDA
             if constexpr (std::is_same_v<T, f16>) {
                 value = static_cast<double>(__half2float(input[row_base + col]));
             } else if constexpr (std::is_same_v<T, bf16>) {
@@ -134,12 +135,16 @@ std::vector<double> rms_norm_expected(const std::vector<T>& input,
             } else {
                 value = static_cast<double>(input[row_base + col]);
             }
+#else
+            value = static_cast<double>(input[row_base + col]);
+#endif
             sum_squares += value * value;
         }
 
         const double inv_rms = 1.0 / std::sqrt(sum_squares / static_cast<double>(normalized_size) + eps);
         for (usize col = 0; col < normalized_size; ++col) {
             double value = 0.0;
+#ifdef PULSE_USE_CUDA
             if constexpr (std::is_same_v<T, f16>) {
                 value = static_cast<double>(__half2float(input[row_base + col]));
             } else if constexpr (std::is_same_v<T, bf16>) {
@@ -147,9 +152,13 @@ std::vector<double> rms_norm_expected(const std::vector<T>& input,
             } else {
                 value = static_cast<double>(input[row_base + col]);
             }
+#else
+            value = static_cast<double>(input[row_base + col]);
+#endif
 
             double scale = 1.0;
             if (weight != nullptr) {
+#ifdef PULSE_USE_CUDA
                 if constexpr (std::is_same_v<T, f16>) {
                     scale = static_cast<double>(__half2float((*weight)[col]));
                 } else if constexpr (std::is_same_v<T, bf16>) {
@@ -157,6 +166,9 @@ std::vector<double> rms_norm_expected(const std::vector<T>& input,
                 } else {
                     scale = static_cast<double>((*weight)[col]);
                 }
+#else
+                scale = static_cast<double>((*weight)[col]);
+#endif
             }
             output[row_base + col] = quantize_output_to_double<T>(value * inv_rms * scale);
         }
@@ -169,6 +181,7 @@ template<typename T>
 void expect_values_near(const T* actual, const std::vector<double>& expected, double tolerance) {
     ASSERT_NE(actual, nullptr);
     for (usize i = 0; i < expected.size(); ++i) {
+#ifdef PULSE_USE_CUDA
         if constexpr (std::is_same_v<T, f16>) {
             EXPECT_NEAR(static_cast<double>(__half2float(actual[i])), expected[i], tolerance);
         } else if constexpr (std::is_same_v<T, bf16>) {
@@ -176,6 +189,9 @@ void expect_values_near(const T* actual, const std::vector<double>& expected, do
         } else {
             EXPECT_NEAR(static_cast<double>(actual[i]), expected[i], tolerance);
         }
+#else
+        EXPECT_NEAR(static_cast<double>(actual[i]), expected[i], tolerance);
+#endif
     }
 }
 

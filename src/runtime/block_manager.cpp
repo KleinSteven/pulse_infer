@@ -6,11 +6,10 @@ namespace pulse::runtime {
 BlockManager::BlockManager(i32 num_blocks, i32 block_size, bool thread_safe)
     : num_blocks_(num_blocks), block_size_(block_size), thread_safe_(thread_safe) {
     free_blocks_.reserve(static_cast<u32>(num_blocks_));
-    allocated_.reserve(static_cast<u32>(num_blocks_));
+    allocated_.resize(static_cast<u32>(num_blocks_), false);
 
     for (i32 i = 0; i < num_blocks; ++i) {
         free_blocks_.push_back(i);
-        allocated_[static_cast<u32>(i)] = false;
     }
 
     pulse::info("BlockManager initialized:");
@@ -46,7 +45,8 @@ Result<std::vector<i32>> BlockManager::allocate_blocks(i32 num_blocks_needed) {
         return Err<std::vector<i32>>(ErrorCode::OutOfMemory, "Insufficient free blocks");
     }
 
-    std::vector<i32> allocated_block_ids(static_cast<u32>(num_blocks_needed));
+    std::vector<i32> allocated_block_ids;
+    allocated_block_ids.reserve(static_cast<u32>(num_blocks_needed));
 
     for (i32 i = 0; i < num_blocks_needed; i++) {
         i32 id = free_blocks_.back();

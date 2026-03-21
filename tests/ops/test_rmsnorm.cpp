@@ -96,26 +96,11 @@ void assert_tensor_created(const TensorWithValues<T>& tensor_with_values) {
 }
 
 template<typename T>
-double scalar_to_double(T value) {
-    return static_cast<double>(value);
-}
-
-template<typename T>
 double quantize_output_to_double(double value) {
     return value;
 }
 
 #ifdef PULSE_USE_CUDA
-template<>
-double scalar_to_double<f16>(f16 value) {
-    return static_cast<double>(__half2float(value));
-}
-
-template<>
-double scalar_to_double<bf16>(bf16 value) {
-    return static_cast<double>(__bfloat162float(value));
-}
-
 template<>
 double quantize_output_to_double<f16>(double value) {
     return static_cast<double>(__half2float(__float2half(static_cast<float>(value))));
@@ -141,14 +126,38 @@ std::vector<double> rms_norm_expected(const std::vector<T>& input,
         const auto row_base = row * normalized_size;
         double sum_squares = 0.0;
         for (usize col = 0; col < normalized_size; ++col) {
-            const double value = scalar_to_double(input[row_base + col]);
+            double value = 0.0;
+            if constexpr (std::is_same_v<T, f16>) {
+                value = static_cast<double>(__half2float(input[row_base + col]));
+            } else if constexpr (std::is_same_v<T, bf16>) {
+                value = static_cast<double>(__bfloat162float(input[row_base + col]));
+            } else {
+                value = static_cast<double>(input[row_base + col]);
+            }
             sum_squares += value * value;
         }
 
         const double inv_rms = 1.0 / std::sqrt(sum_squares / static_cast<double>(normalized_size) + eps);
         for (usize col = 0; col < normalized_size; ++col) {
-            const double value = scalar_to_double(input[row_base + col]);
-            const double scale = weight == nullptr ? 1.0 : scalar_to_double((*weight)[col]);
+            double value = 0.0;
+            if constexpr (std::is_same_v<T, f16>) {
+                value = static_cast<double>(__half2float(input[row_base + col]));
+            } else if constexpr (std::is_same_v<T, bf16>) {
+                value = static_cast<double>(__bfloat162float(input[row_base + col]));
+            } else {
+                value = static_cast<double>(input[row_base + col]);
+            }
+
+            double scale = 1.0;
+            if (weight != nullptr) {
+                if constexpr (std::is_same_v<T, f16>) {
+                    scale = static_cast<double>(__half2float((*weight)[col]));
+                } else if constexpr (std::is_same_v<T, bf16>) {
+                    scale = static_cast<double>(__bfloat162float((*weight)[col]));
+                } else {
+                    scale = static_cast<double>((*weight)[col]);
+                }
+            }
             output[row_base + col] = quantize_output_to_double<T>(value * inv_rms * scale);
         }
     }
@@ -160,7 +169,13 @@ template<typename T>
 void expect_values_near(const T* actual, const std::vector<double>& expected, double tolerance) {
     ASSERT_NE(actual, nullptr);
     for (usize i = 0; i < expected.size(); ++i) {
-        EXPECT_NEAR(scalar_to_double(actual[i]), expected[i], tolerance);
+        if constexpr (std::is_same_v<T, f16>) {
+            EXPECT_NEAR(static_cast<double>(__half2float(actual[i])), expected[i], tolerance);
+        } else if constexpr (std::is_same_v<T, bf16>) {
+            EXPECT_NEAR(static_cast<double>(__bfloat162float(actual[i])), expected[i], tolerance);
+        } else {
+            EXPECT_NEAR(static_cast<double>(actual[i]), expected[i], tolerance);
+        }
     }
 }
 

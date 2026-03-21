@@ -137,43 +137,26 @@ void expect_values_eq(const T* actual, const std::vector<T>& expected) {
 
 #ifdef PULSE_USE_CUDA
 template<typename T>
-float scalar_to_float(T value) {
-    return static_cast<float>(value);
-}
-
-template<>
-float scalar_to_float<f16>(f16 value) {
-    return __half2float(value);
-}
-
-template<>
-float scalar_to_float<bf16>(bf16 value) {
-    return __bfloat162float(value);
-}
-
-template<typename T>
-float rounded_silu_to_float(T value) {
-    const float value_f32 = scalar_to_float(value);
-    return value_f32 / (1.0f + std::exp(-value_f32));
-}
-
-template<>
-float rounded_silu_to_float<f16>(f16 value) {
-    const float value_f32 = scalar_to_float(value);
-    return __half2float(__float2half(value_f32 / (1.0f + std::exp(-value_f32))));
-}
-
-template<>
-float rounded_silu_to_float<bf16>(bf16 value) {
-    const float value_f32 = scalar_to_float(value);
-    return __bfloat162float(__float2bfloat16(value_f32 / (1.0f + std::exp(-value_f32))));
-}
-
-template<typename T>
 std::vector<float> silu_expected_as_float(const std::vector<T>& input) {
     std::vector<float> result(input.size());
     for (usize i = 0; i < input.size(); ++i) {
-        result[i] = rounded_silu_to_float(input[i]);
+        float value_f32 = 0.0f;
+        if constexpr (std::is_same_v<T, f16>) {
+            value_f32 = __half2float(input[i]);
+        } else if constexpr (std::is_same_v<T, bf16>) {
+            value_f32 = __bfloat162float(input[i]);
+        } else {
+            value_f32 = static_cast<float>(input[i]);
+        }
+
+        const float silu_value = value_f32 / (1.0f + std::exp(-value_f32));
+        if constexpr (std::is_same_v<T, f16>) {
+            result[i] = __half2float(__float2half(silu_value));
+        } else if constexpr (std::is_same_v<T, bf16>) {
+            result[i] = __bfloat162float(__float2bfloat16(silu_value));
+        } else {
+            result[i] = silu_value;
+        }
     }
     return result;
 }
@@ -183,7 +166,13 @@ void expect_values_near(const T* actual, const std::vector<float>& expected, flo
     ASSERT_NE(actual, nullptr);
 
     for (usize i = 0; i < expected.size(); ++i) {
-        EXPECT_NEAR(scalar_to_float(actual[i]), expected[i], tolerance);
+        if constexpr (std::is_same_v<T, f16>) {
+            EXPECT_NEAR(__half2float(actual[i]), expected[i], tolerance);
+        } else if constexpr (std::is_same_v<T, bf16>) {
+            EXPECT_NEAR(__bfloat162float(actual[i]), expected[i], tolerance);
+        } else {
+            EXPECT_NEAR(static_cast<float>(actual[i]), expected[i], tolerance);
+        }
     }
 }
 #endif

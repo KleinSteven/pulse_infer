@@ -204,21 +204,6 @@ void expect_values_eq(const T* actual, const std::vector<T>& expected) {
 
 #ifdef PULSE_USE_CUDA
 template<typename T>
-float scalar_to_float(T value) {
-    return static_cast<float>(value);
-}
-
-template<>
-float scalar_to_float<f16>(f16 value) {
-    return __half2float(value);
-}
-
-template<>
-float scalar_to_float<bf16>(bf16 value) {
-    return __bfloat162float(value);
-}
-
-template<typename T>
 float quantize_float_to_output(float value);
 
 template<>
@@ -243,15 +228,28 @@ std::vector<float> linear_expected_as_float(const std::vector<T>& input,
         for (i32 col = 0; col < out_features; ++col) {
             float sum = 0.0f;
             for (i32 inner = 0; inner < in_features; ++inner) {
-                sum += scalar_to_float(input[static_cast<usize>(row) * static_cast<usize>(in_features) +
-                                             static_cast<usize>(inner)]) *
-                       scalar_to_float(weight[static_cast<usize>(col) * static_cast<usize>(in_features) +
-                                              static_cast<usize>(inner)]);
+                const auto input_value =
+                    input[static_cast<usize>(row) * static_cast<usize>(in_features) + static_cast<usize>(inner)];
+                const auto weight_value =
+                    weight[static_cast<usize>(col) * static_cast<usize>(in_features) + static_cast<usize>(inner)];
+                if constexpr (std::is_same_v<T, f16>) {
+                    sum += __half2float(input_value) * __half2float(weight_value);
+                } else if constexpr (std::is_same_v<T, bf16>) {
+                    sum += __bfloat162float(input_value) * __bfloat162float(weight_value);
+                } else {
+                    sum += static_cast<float>(input_value) * static_cast<float>(weight_value);
+                }
             }
 
             sum = quantize_float_to_output<T>(sum);
             if (bias != nullptr) {
-                sum = quantize_float_to_output<T>(sum + scalar_to_float((*bias)[col]));
+                if constexpr (std::is_same_v<T, f16>) {
+                    sum = quantize_float_to_output<T>(sum + __half2float((*bias)[col]));
+                } else if constexpr (std::is_same_v<T, bf16>) {
+                    sum = quantize_float_to_output<T>(sum + __bfloat162float((*bias)[col]));
+                } else {
+                    sum = quantize_float_to_output<T>(sum + static_cast<float>((*bias)[col]));
+                }
             }
 
             result[static_cast<usize>(row) * static_cast<usize>(out_features) + static_cast<usize>(col)] =
@@ -267,7 +265,13 @@ void expect_values_near(const T* actual, const std::vector<float>& expected, flo
     ASSERT_NE(actual, nullptr);
 
     for (usize i = 0; i < expected.size(); ++i) {
-        EXPECT_NEAR(scalar_to_float(actual[i]), expected[i], tolerance);
+        if constexpr (std::is_same_v<T, f16>) {
+            EXPECT_NEAR(__half2float(actual[i]), expected[i], tolerance);
+        } else if constexpr (std::is_same_v<T, bf16>) {
+            EXPECT_NEAR(__bfloat162float(actual[i]), expected[i], tolerance);
+        } else {
+            EXPECT_NEAR(static_cast<float>(actual[i]), expected[i], tolerance);
+        }
     }
 }
 #endif

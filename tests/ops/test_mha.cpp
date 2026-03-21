@@ -289,28 +289,16 @@ std::vector<bf16> cuda_float_vector<bf16>(const std::vector<f32>& values) {
 }
 
 template<typename T>
-double cuda_scalar_to_double(T value);
-
-template<>
-double cuda_scalar_to_double<f32>(f32 value) {
-    return static_cast<double>(value);
-}
-
-template<>
-double cuda_scalar_to_double<f16>(f16 value) {
-    return static_cast<double>(__half2float(value));
-}
-
-template<>
-double cuda_scalar_to_double<bf16>(bf16 value) {
-    return static_cast<double>(__bfloat162float(value));
-}
-
-template<typename T>
 void expect_cuda_host_values_near(const T* actual, const std::vector<double>& expected, double tolerance) {
     ASSERT_NE(actual, nullptr);
     for (usize i = 0; i < expected.size(); ++i) {
-        EXPECT_NEAR(cuda_scalar_to_double(actual[i]), expected[i], tolerance);
+        if constexpr (std::is_same_v<T, f16>) {
+            EXPECT_NEAR(static_cast<double>(__half2float(actual[i])), expected[i], tolerance);
+        } else if constexpr (std::is_same_v<T, bf16>) {
+            EXPECT_NEAR(static_cast<double>(__bfloat162float(actual[i])), expected[i], tolerance);
+        } else {
+            EXPECT_NEAR(static_cast<double>(actual[i]), expected[i], tolerance);
+        }
     }
 }
 

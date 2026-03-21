@@ -18,4 +18,15 @@ Result<void> rope_cuda_launch(const void* input,
                               DataType dtype,
                               cudaStream_t stream = nullptr);
 
+Result<void> rope_positions_cuda_launch(const void* input,
+                                        void* output,
+                                        const i32* positions,
+                                        i32 batch_size,
+                                        i32 rows_per_batch,
+                                        i32 head_dim,
+                                        i32 rotary_dim,
+                                        f32 theta,
+                                        DataType dtype,
+                                        cudaStream_t stream = nullptr);
+
 }  // namespace pulse::kernels::cuda

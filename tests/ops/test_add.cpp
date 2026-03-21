@@ -137,42 +137,19 @@ void expect_values_eq(const T* actual, const std::vector<T>& expected) {
 
 #ifdef PULSE_USE_CUDA
 template<typename T>
-float scalar_to_float(T value) {
-    return static_cast<float>(value);
-}
-
-template<>
-float scalar_to_float<f16>(f16 value) {
-    return __half2float(value);
-}
-
-template<>
-float scalar_to_float<bf16>(bf16 value) {
-    return __bfloat162float(value);
-}
-
-template<typename T>
-float rounded_sum_to_float(T lhs, T rhs) {
-    return scalar_to_float(lhs) + scalar_to_float(rhs);
-}
-
-template<>
-float rounded_sum_to_float<f16>(f16 lhs, f16 rhs) {
-    return __half2float(__float2half(scalar_to_float(lhs) + scalar_to_float(rhs)));
-}
-
-template<>
-float rounded_sum_to_float<bf16>(bf16 lhs, bf16 rhs) {
-    return __bfloat162float(__float2bfloat16(scalar_to_float(lhs) + scalar_to_float(rhs)));
-}
-
-template<typename T>
 std::vector<float> add_expected_as_float(const std::vector<T>& lhs, const std::vector<T>& rhs) {
     EXPECT_EQ(lhs.size(), rhs.size());
 
     std::vector<float> result(lhs.size());
     for (usize i = 0; i < lhs.size(); ++i) {
-        result[i] = rounded_sum_to_float(lhs[i], rhs[i]);
+        if constexpr (std::is_same_v<T, f16>) {
+            result[i] = __half2float(__float2half(__half2float(lhs[i]) + __half2float(rhs[i])));
+        } else if constexpr (std::is_same_v<T, bf16>) {
+            result[i] =
+                __bfloat162float(__float2bfloat16(__bfloat162float(lhs[i]) + __bfloat162float(rhs[i])));
+        } else {
+            result[i] = static_cast<float>(lhs[i]) + static_cast<float>(rhs[i]);
+        }
     }
     return result;
 }
@@ -182,7 +159,13 @@ void expect_values_near(const T* actual, const std::vector<float>& expected, flo
     ASSERT_NE(actual, nullptr);
 
     for (usize i = 0; i < expected.size(); ++i) {
-        EXPECT_NEAR(scalar_to_float(actual[i]), expected[i], tolerance);
+        if constexpr (std::is_same_v<T, f16>) {
+            EXPECT_NEAR(__half2float(actual[i]), expected[i], tolerance);
+        } else if constexpr (std::is_same_v<T, bf16>) {
+            EXPECT_NEAR(__bfloat162float(actual[i]), expected[i], tolerance);
+        } else {
+            EXPECT_NEAR(static_cast<float>(actual[i]), expected[i], tolerance);
+        }
     }
 }
 #endif

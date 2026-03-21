@@ -21,6 +21,7 @@ add_executable(pulse_tests
   ops/test_mul.cpp
   ops/test_rmsnorm.cpp
   ops/test_rope.cpp
+  scheduler/test_continuous_batch_scheduler.cpp
   test_main.cpp
 )
 

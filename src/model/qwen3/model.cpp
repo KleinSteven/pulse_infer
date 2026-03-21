@@ -4,6 +4,7 @@
 #include <format>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <utility>
 
 #include "pulse/layer/embedding.hpp"
@@ -14,7 +15,10 @@
 #include "pulse/ops/matmul.hpp"
 #include "pulse/ops/mha.hpp"
 #include "pulse/ops/mul.hpp"
+#include "pulse/ops/paged_attention.hpp"
+#include "pulse/ops/paged_kv_write.hpp"
 #include "pulse/ops/rope.hpp"
+#include "pulse/runtime/kv_cache_manager.hpp"
 
 #ifdef PULSE_USE_CUDA
 #include <cuda_runtime.h>
@@ -104,6 +108,27 @@ public:
         Tensor q_rope;
         Tensor k_rope;
         Tensor attn_score;
+        Tensor attn_output;
+        Tensor attn_projected;
+        Tensor attn_residual;
+        Tensor mlp_input;
+        Tensor gate;
+        Tensor up;
+        Tensor gate_act;
+        Tensor gated;
+        Tensor mlp_output;
+        Tensor mlp_residual;
+    };
+
+    struct BatchWorkspace {
+        Tensor attn_input;
+        Tensor q;
+        Tensor k;
+        Tensor v;
+        Tensor q_norm;
+        Tensor k_norm;
+        Tensor q_rope;
+        Tensor k_rope;
         Tensor attn_output;
         Tensor attn_projected;
         Tensor attn_residual;
@@ -335,8 +360,11 @@ public:
         if (!q_norm_result) {
             return q_norm_result;
         }
-        auto q_rope_result =
-            ops::rope(workspace_.q_norm, workspace_.q_rope, position, static_cast<f32>(config_.rope_theta), config_.head_dim);
+        auto q_rope_result = ops::rope(workspace_.q_norm,
+                                       workspace_.q_rope,
+                                       position,
+                                       static_cast<f32>(config_.rope_theta),
+                                       config_.head_dim);
         if (!q_rope_result) {
             return q_rope_result;
         }
@@ -353,8 +381,11 @@ public:
         if (!k_norm_result) {
             return k_norm_result;
         }
-        auto k_rope_result =
-            ops::rope(workspace_.k_norm, workspace_.k_rope, position, static_cast<f32>(config_.rope_theta), config_.head_dim);
+        auto k_rope_result = ops::rope(workspace_.k_norm,
+                                       workspace_.k_rope,
+                                       position,
+                                       static_cast<f32>(config_.rope_theta),
+                                       config_.head_dim);
         if (!k_rope_result) {
             return k_rope_result;
         }
@@ -433,6 +464,144 @@ public:
     }
 
 private:
+    [[nodiscard]] Result<void> ensure_batch_workspace(i32 total_tokens) {
+        if (total_tokens == batch_capacity_) {
+            return Ok();
+        }
+
+        auto result = Tensor::create({total_tokens, config_.hidden_size}, dtype_, device_);
+        if (!result) {
+            return Err<void>(std::move(result.error()));
+        }
+        batch_workspace_.attn_input = std::move(result.value());
+
+        result = Tensor::create({total_tokens, q_hidden_size_}, dtype_, device_);
+        if (!result) {
+            return Err<void>(std::move(result.error()));
+        }
+        batch_workspace_.q = std::move(result.value());
+
+        result = Tensor::create({total_tokens, kv_hidden_size_}, dtype_, device_);
+        if (!result) {
+            return Err<void>(std::move(result.error()));
+        }
+        batch_workspace_.k = std::move(result.value());
+
+        result = Tensor::create({total_tokens, kv_hidden_size_}, dtype_, device_);
+        if (!result) {
+            return Err<void>(std::move(result.error()));
+        }
+        batch_workspace_.v = std::move(result.value());
+
+        result =
+            Tensor::create({total_tokens, config_.num_attention_heads, config_.head_dim}, dtype_, device_);
+        if (!result) {
+            return Err<void>(std::move(result.error()));
+        }
+        batch_workspace_.q_norm = std::move(result.value());
+
+        result =
+            Tensor::create({total_tokens, config_.num_key_value_heads, config_.head_dim}, dtype_, device_);
+        if (!result) {
+            return Err<void>(std::move(result.error()));
+        }
+        batch_workspace_.k_norm = std::move(result.value());
+
+        result =
+            Tensor::create({total_tokens, config_.num_attention_heads, config_.head_dim}, dtype_, device_);
+        if (!result) {
+            return Err<void>(std::move(result.error()));
+        }
+        batch_workspace_.q_rope = std::move(result.value());
+
+        result =
+            Tensor::create({total_tokens, config_.num_key_value_heads, config_.head_dim}, dtype_, device_);
+        if (!result) {
+            return Err<void>(std::move(result.error()));
+        }
+        batch_workspace_.k_rope = std::move(result.value());
+
+        result =
+            Tensor::create({total_tokens, config_.num_attention_heads, config_.head_dim}, dtype_, device_);
+        if (!result) {
+            return Err<void>(std::move(result.error()));
+        }
+        batch_workspace_.attn_output = std::move(result.value());
+
+        result = Tensor::create({total_tokens, config_.hidden_size}, dtype_, device_);
+        if (!result) {
+            return Err<void>(std::move(result.error()));
+        }
+        batch_workspace_.attn_projected = std::move(result.value());
+
+        result = Tensor::create({total_tokens, config_.hidden_size}, dtype_, device_);
+        if (!result) {
+            return Err<void>(std::move(result.error()));
+        }
+        batch_workspace_.attn_residual = std::move(result.value());
+
+        result = Tensor::create({total_tokens, config_.hidden_size}, dtype_, device_);
+        if (!result) {
+            return Err<void>(std::move(result.error()));
+        }
+        batch_workspace_.mlp_input = std::move(result.value());
+
+        result = Tensor::create({total_tokens, config_.intermediate_size}, dtype_, device_);
+        if (!result) {
+            return Err<void>(std::move(result.error()));
+        }
+        batch_workspace_.gate = std::move(result.value());
+
+        result = Tensor::create({total_tokens, config_.intermediate_size}, dtype_, device_);
+        if (!result) {
+            return Err<void>(std::move(result.error()));
+        }
+        batch_workspace_.up = std::move(result.value());
+
+        result = Tensor::create({total_tokens, config_.intermediate_size}, dtype_, device_);
+        if (!result) {
+            return Err<void>(std::move(result.error()));
+        }
+        batch_workspace_.gate_act = std::move(result.value());
+
+        result = Tensor::create({total_tokens, config_.intermediate_size}, dtype_, device_);
+        if (!result) {
+            return Err<void>(std::move(result.error()));
+        }
+        batch_workspace_.gated = std::move(result.value());
+
+        result = Tensor::create({total_tokens, config_.hidden_size}, dtype_, device_);
+        if (!result) {
+            return Err<void>(std::move(result.error()));
+        }
+        batch_workspace_.mlp_output = std::move(result.value());
+
+        result = Tensor::create({total_tokens, config_.hidden_size}, dtype_, device_);
+        if (!result) {
+            return Err<void>(std::move(result.error()));
+        }
+        batch_workspace_.mlp_residual = std::move(result.value());
+
+        batch_capacity_ = total_tokens;
+        return Ok();
+    }
+
+    [[nodiscard]] Result<void> prepare_batch_workspace_shapes(i32 total_tokens) {
+        auto result = batch_workspace_.q.reshape({total_tokens, q_hidden_size_});
+        if (!result) {
+            return result;
+        }
+        result = batch_workspace_.k.reshape({total_tokens, kv_hidden_size_});
+        if (!result) {
+            return result;
+        }
+        result = batch_workspace_.v.reshape({total_tokens, kv_hidden_size_});
+        if (!result) {
+            return result;
+        }
+        return batch_workspace_.attn_output.reshape({total_tokens, q_hidden_size_});
+    }
+
     [[nodiscard]] Result<void> init_workspace() {
         auto result = Tensor::create({1, config_.hidden_size}, dtype_, device_);
         if (!result) {
@@ -577,6 +746,185 @@ private:
         return workspace_.k_rope.reshape({config_.num_key_value_heads, 1, config_.head_dim});
     }
 
+public:
+    [[nodiscard]] Result<void> forward_batched(Tensor& hidden,
+                                               const Tensor& positions,
+                                               const Tensor& block_table,
+                                               const Tensor& context_lens,
+                                               Tensor& key_cache,
+                                               Tensor& value_cache) {
+        if (!initialized_) {
+            return Err<void>(ErrorCode::InvalidOperator, "Qwen3 decoder layer is not initialized");
+        }
+
+        if (hidden.ndim() != 2 || hidden.dim(1) != config_.hidden_size) {
+            return Err<void>(ErrorCode::ShapeMismatch, "Batched decoder hidden tensor shape mismatch");
+        }
+
+        const i32 total_tokens = hidden.dim(0);
+        if (positions.ndim() != 1 || positions.dim(0) != total_tokens) {
+            return Err<void>(ErrorCode::ShapeMismatch, "Batched decoder positions tensor shape mismatch");
+        }
+
+        auto batch_workspace_result = ensure_batch_workspace(total_tokens);
+        if (!batch_workspace_result) {
+            return batch_workspace_result;
+        }
+
+        auto shape_result = prepare_batch_workspace_shapes(total_tokens);
+        if (!shape_result) {
+            return shape_result;
+        }
+
+        auto attn_input_result = input_norm_.forward(hidden, batch_workspace_.attn_input);
+        if (!attn_input_result) {
+            return attn_input_result;
+        }
+
+        auto q_result = q_proj_->forward(batch_workspace_.attn_input, batch_workspace_.q);
+        if (!q_result) {
+            return q_result;
+        }
+
+        auto k_result = k_proj_->forward(batch_workspace_.attn_input, batch_workspace_.k);
+        if (!k_result) {
+            return k_result;
+        }
+
+        auto v_result = v_proj_->forward(batch_workspace_.attn_input, batch_workspace_.v);
+        if (!v_result) {
+            return v_result;
+        }
+
+        auto q_shape_result =
+            batch_workspace_.q.reshape({total_tokens, config_.num_attention_heads, config_.head_dim});
+        if (!q_shape_result) {
+            return q_shape_result;
+        }
+        auto k_shape_result =
+            batch_workspace_.k.reshape({total_tokens, config_.num_key_value_heads, config_.head_dim});
+        if (!k_shape_result) {
+            return k_shape_result;
+        }
+        auto v_shape_result =
+            batch_workspace_.v.reshape({total_tokens, config_.num_key_value_heads, config_.head_dim});
+        if (!v_shape_result) {
+            return v_shape_result;
+        }
+
+        auto q_norm_result = q_norm_.forward(batch_workspace_.q, batch_workspace_.q_norm);
+        if (!q_norm_result) {
+            return q_norm_result;
+        }
+
+        auto q_rope_result = ops::rope(batch_workspace_.q_norm,
+                                       batch_workspace_.q_rope,
+                                       positions,
+                                       static_cast<f32>(config_.rope_theta),
+                                       config_.head_dim);
+        if (!q_rope_result) {
+            return q_rope_result;
+        }
+
+        auto k_norm_result = k_norm_.forward(batch_workspace_.k, batch_workspace_.k_norm);
+        if (!k_norm_result) {
+            return k_norm_result;
+        }
+
+        auto k_rope_result = ops::rope(batch_workspace_.k_norm,
+                                       batch_workspace_.k_rope,
+                                       positions,
+                                       static_cast<f32>(config_.rope_theta),
+                                       config_.head_dim);
+        if (!k_rope_result) {
+            return k_rope_result;
+        }
+
+        auto paged_kv_result = ops::paged_kv_write(batch_workspace_.k_rope,
+                                                   batch_workspace_.v,
+                                                   key_cache,
+                                                   value_cache,
+                                                   block_table,
+                                                   positions);
+        if (!paged_kv_result) {
+            return paged_kv_result;
+        }
+
+        auto attn_output_shape_result = batch_workspace_.attn_output.reshape(
+            {total_tokens, config_.num_attention_heads, config_.head_dim});
+        if (!attn_output_shape_result) {
+            return attn_output_shape_result;
+        }
+
+        auto paged_attention_result = ops::paged_attention(batch_workspace_.q_rope,
+                                                           key_cache,
+                                                           value_cache,
+                                                           block_table,
+                                                           context_lens,
+                                                           batch_workspace_.attn_output);
+        if (!paged_attention_result) {
+            return paged_attention_result;
+        }
+
+        auto attn_output_flatten_result =
+            batch_workspace_.attn_output.reshape({total_tokens, q_hidden_size_});
+        if (!attn_output_flatten_result) {
+            return attn_output_flatten_result;
+        }
+
+        auto attn_projected_result =
+            o_proj_->forward(batch_workspace_.attn_output, batch_workspace_.attn_projected);
+        if (!attn_projected_result) {
+            return attn_projected_result;
+        }
+
+        auto attn_residual_result =
+            ops::add(hidden, batch_workspace_.attn_projected, batch_workspace_.attn_residual);
+        if (!attn_residual_result) {
+            return attn_residual_result;
+        }
+        std::swap(hidden, batch_workspace_.attn_residual);
+
+        auto mlp_input_result = post_attention_norm_.forward(hidden, batch_workspace_.mlp_input);
+        if (!mlp_input_result) {
+            return mlp_input_result;
+        }
+
+        auto gate_result = gate_proj_->forward(batch_workspace_.mlp_input, batch_workspace_.gate);
+        if (!gate_result) {
+            return gate_result;
+        }
+
+        auto up_result = up_proj_->forward(batch_workspace_.mlp_input, batch_workspace_.up);
+        if (!up_result) {
+            return up_result;
+        }
+
+        auto gate_act_result = silu_.forward(batch_workspace_.gate, batch_workspace_.gate_act);
+        if (!gate_act_result) {
+            return gate_act_result;
+        }
+
+        auto gated_result = ops::mul(batch_workspace_.gate_act, batch_workspace_.up, batch_workspace_.gated);
+        if (!gated_result) {
+            return gated_result;
+        }
+
+        auto mlp_output_result = down_proj_->forward(batch_workspace_.gated, batch_workspace_.mlp_output);
+        if (!mlp_output_result) {
+            return mlp_output_result;
+        }
+
+        auto mlp_residual_result =
+            ops::add(hidden, batch_workspace_.mlp_output, batch_workspace_.mlp_residual);
+        if (!mlp_residual_result) {
+            return mlp_residual_result;
+        }
+        std::swap(hidden, batch_workspace_.mlp_residual);
+
+        return Ok();
+    }
+
     Qwen3Config config_;
     VarBuilder layer_builder_;
     DeviceType device_ = DeviceType::CPU;
@@ -597,6 +945,8 @@ private:
     std::unique_ptr<pulse::layer::Linear> down_proj_;
     pulse::layer::SiLU silu_;
     Workspace workspace_;
+    BatchWorkspace batch_workspace_;
+    i32 batch_capacity_ = 0;
     bool initialized_ = false;
 };
 
@@ -715,6 +1065,31 @@ Result<void> Qwen3Model::init() {
     return Ok();
 }
 
+Result<void> Qwen3Model::init_paged_cache(i32 num_blocks, i32 block_size) {
+    if (!initialized_) {
+        return Err<void>(ErrorCode::InvalidOperator, "Qwen3Model must be initialized before paged cache");
+    }
+
+    if (device_ != DeviceType::CUDA) {
+        return Err<void>(ErrorCode::InvalidArgument, "Paged cache currently only supports CUDA");
+    }
+
+    paged_cache_manager_ = std::make_unique<runtime::KVCacheManager>(num_blocks,
+                                                                     block_size,
+                                                                     config_.num_hidden_layers,
+                                                                     config_.num_key_value_heads,
+                                                                     config_.head_dim,
+                                                                     device_,
+                                                                     dtype_);
+    auto init_result = paged_cache_manager_->init();
+    if (!init_result) {
+        return init_result;
+    }
+
+    use_paged_cache_ = true;
+    return Ok();
+}
+
 Result<void> Qwen3Model::forward(i32 token, i32 position, Tensor& logits) {
     if (!initialized_) {
         return Err<void>(ErrorCode::InvalidOperator, "Qwen3Model is not initialized");
@@ -801,6 +1176,213 @@ Result<void> Qwen3Model::forward(i32 token, i32 position, Tensor& logits) {
     return Err<void>(ErrorCode::InvalidOperator, "lm_head is not initialized");
 }
 
+Result<void> Qwen3Model::forward_batched(const std::vector<i32>& tokens,
+                                         const std::vector<i32>& positions,
+                                         const std::vector<i32>& seq_ids,
+                                         Tensor& logits) {
+    if (!initialized_) {
+        return Err<void>(ErrorCode::InvalidOperator, "Qwen3Model is not initialized");
+    }
+
+    if (!use_paged_cache_ || paged_cache_manager_ == nullptr) {
+        return Err<void>(ErrorCode::InvalidOperator, "Paged cache is not initialized");
+    }
+
+    if (tokens.empty()) {
+        return Err<void>(ErrorCode::InvalidArgument, "Batched forward tokens cannot be empty");
+    }
+
+    if (positions.size() != tokens.size() || seq_ids.size() != tokens.size()) {
+        return Err<void>(ErrorCode::InvalidArgument, "tokens, positions and seq_ids size mismatch");
+    }
+
+    const i32 total_tokens = static_cast<i32>(tokens.size());
+    if (logits.ndim() != 2 || logits.dim(0) != total_tokens || logits.dim(1) != config_.vocab_size) {
+        return Err<void>(ErrorCode::ShapeMismatch, "Batched forward logits tensor shape mismatch");
+    }
+
+    std::unordered_map<i32, i32> max_positions;
+
+    for (usize index = 0; index < tokens.size(); ++index) {
+        const i32 seq_id = seq_ids[index];
+        const i32 position = positions[index];
+        if (position < 0 || position >= config_.max_position_embeddings) {
+            return Err<void>(ErrorCode::InvalidArgument, "Batched forward position out of bounds");
+        }
+
+        auto max_it = max_positions.find(seq_id);
+        if (max_it == max_positions.end() || position > max_it->second) {
+            max_positions[seq_id] = position;
+        }
+
+        if (!paged_cache_manager_->is_sequence_allocated(seq_id)) {
+            // ceil((position + block_size) / block_size)
+            auto alloc_result =
+                paged_cache_manager_->allocate_sequence(seq_id,
+                                                        position + paged_cache_manager_->block_size());
+
+            if (!alloc_result) {
+                return Err<void>(std::move(alloc_result.error()));
+            }
+
+            continue;
+        }
+
+        auto capacity_result = paged_cache_manager_->get_sequence_capacity(seq_id);
+        if (!capacity_result) {
+            return Err<void>(std::move(capacity_result.error()));
+        }
+
+        while (position >= capacity_result.value()) {
+            auto extend_result =
+                paged_cache_manager_->extend_sequence(seq_id, paged_cache_manager_->block_size());
+
+            if (!extend_result) {
+                return Err<void>(std::move(extend_result.error()));
+            }
+
+            capacity_result = paged_cache_manager_->get_sequence_capacity(seq_id);
+
+            if (!capacity_result) {
+                return Err<void>(std::move(capacity_result.error()));
+            }
+        }
+    }
+
+    auto token_tensor_result = Tensor::from_vector<i32>(tokens, device_);
+    if (!token_tensor_result) {
+        return Err<void>(std::move(token_tensor_result.error()));
+    }
+
+    auto positions_tensor_result = Tensor::from_vector<i32>(positions, device_);
+    if (!positions_tensor_result) {
+        return Err<void>(std::move(positions_tensor_result.error()));
+    }
+
+    std::vector<i32> context_lens;
+    context_lens.reserve(positions.size());
+    for (i32 position : positions) {
+        context_lens.push_back(position + 1);
+    }
+
+    auto context_lens_tensor_result = Tensor::from_vector<i32>(context_lens, device_);
+    if (!context_lens_tensor_result) {
+        return Err<void>(std::move(context_lens_tensor_result.error()));
+    }
+
+    auto block_table_result = paged_cache_manager_->get_block_table_tensor(seq_ids);
+    if (!block_table_result) {
+        return Err<void>(std::move(block_table_result.error()));
+    }
+
+    auto block_table_tensor_result = block_table_result.value().to(device_);
+    if (!block_table_tensor_result) {
+        return Err<void>(std::move(block_table_tensor_result.error()));
+    }
+
+    auto hidden_result = embedding_->forward(token_tensor_result.value());
+    if (!hidden_result) {
+        return Err<void>(std::move(hidden_result.error()));
+    }
+    Tensor hidden(std::move(hidden_result.value()));
+    Tensor positions_tensor(std::move(positions_tensor_result.value()));
+    Tensor context_lens_tensor(std::move(context_lens_tensor_result.value()));
+    Tensor block_table_tensor(std::move(block_table_tensor_result.value()));
+
+    for (i32 layer_idx = 0; layer_idx < config_.num_hidden_layers; ++layer_idx) {
+        auto layer_result = layers_[static_cast<usize>(layer_idx)]->forward_batched(
+            hidden,
+            positions_tensor,
+            block_table_tensor,
+            context_lens_tensor,
+            paged_cache_manager_->get_key_cache(layer_idx),
+            paged_cache_manager_->get_value_cache(layer_idx));
+        if (!layer_result) {
+            return layer_result;
+        }
+    }
+
+    auto norm_buffer_result = Tensor::create(hidden.dims(), dtype_, device_);
+    if (!norm_buffer_result) {
+        return Err<void>(std::move(norm_buffer_result.error()));
+    }
+
+    auto norm_result = final_norm_->forward(hidden, norm_buffer_result.value());
+    if (!norm_result) {
+        return norm_result;
+    }
+
+    for (const auto& [seq_id, max_position] : max_positions) {
+        auto update_result = paged_cache_manager_->update_sequence_length(seq_id, max_position + 1);
+        if (!update_result) {
+            return update_result;
+        }
+    }
+
+    if (lm_head_linear_ != nullptr) {
+        if (logits.device() == device_) {
+            return lm_head_linear_->forward(norm_buffer_result.value(), logits);
+        }
+
+        auto device_logits_result = Tensor::create({total_tokens, config_.vocab_size}, dtype_, device_);
+        if (!device_logits_result) {
+            return Err<void>(std::move(device_logits_result.error()));
+        }
+
+        auto forward_result =
+            lm_head_linear_->forward(norm_buffer_result.value(), device_logits_result.value());
+        if (!forward_result) {
+            return forward_result;
+        }
+
+        auto to_output_device_result = device_logits_result.value().to(logits.device());
+        if (!to_output_device_result) {
+            return Err<void>(std::move(to_output_device_result.error()));
+        }
+
+        return copy_tensor_bytes(to_output_device_result.value(), logits);
+    }
+
+    if (config_.tie_word_embeddings && embedding_->weight() != nullptr) {
+        if (logits.device() == device_) {
+            return ops::matmul(norm_buffer_result.value(), *embedding_->weight(), logits, false, true);
+        }
+
+        auto device_logits_result = Tensor::create({total_tokens, config_.vocab_size}, dtype_, device_);
+        if (!device_logits_result) {
+            return Err<void>(std::move(device_logits_result.error()));
+        }
+
+        auto matmul_result = ops::matmul(norm_buffer_result.value(),
+                                         *embedding_->weight(),
+                                         device_logits_result.value(),
+                                         false,
+                                         true);
+        if (!matmul_result) {
+            return matmul_result;
+        }
+
+        auto to_output_device_result = device_logits_result.value().to(logits.device());
+        if (!to_output_device_result) {
+            return Err<void>(std::move(to_output_device_result.error()));
+        }
+
+        return copy_tensor_bytes(to_output_device_result.value(), logits);
+    }
+
+    return Err<void>(ErrorCode::InvalidOperator, "lm_head is not initialized");
+}
+
+Result<Qwen3Model> Qwen3Model::fork() const {
+    Qwen3Model model(config_, device_, dtype_, builder_);
+    auto init_result = model.init();
+    if (!init_result) {
+        return Err<Qwen3Model>(std::move(init_result.error()));
+    }
+
+    return Ok(std::move(model));
+}
+
 void Qwen3Model::reset_cache() {
     for (auto& key_cache : key_cache_) {
         auto zero_result = Tensor::zeros(key_cache.dims(), key_cache.dtype(), key_cache.device());
@@ -814,6 +1396,10 @@ void Qwen3Model::reset_cache() {
         if (zero_result) {
             value_cache = std::move(zero_result.value());
         }
+    }
+
+    if (paged_cache_manager_ != nullptr) {
+        paged_cache_manager_->reset();
     }
 }
 

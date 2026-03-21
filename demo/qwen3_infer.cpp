@@ -202,12 +202,6 @@ void flush_streaming_answer(const Qwen3Tokenizer& tokenizer,
     printed_bytes = printable_bytes;
 }
 
-#ifdef PULSE_USE_CUDA
-f32 scalar_to_float(bf16 value) {
-    return __bfloat162float(value);
-}
-#endif
-
 std::vector<f32> logits_to_float_vector(const Tensor& logits) {
     if (logits.device() != DeviceType::CPU) {
         auto cpu_logits_result = logits.to(DeviceType::CPU);
@@ -227,7 +221,7 @@ std::vector<f32> logits_to_float_vector(const Tensor& logits) {
 
     const auto* ptr = logits.ptr<bf16>();
     for (pulse::usize index = 0; index < logits.size(); ++index) {
-        values.push_back(scalar_to_float(ptr[index]));
+        values.push_back(__bfloat162float(ptr[index]));
     }
 
     return values;

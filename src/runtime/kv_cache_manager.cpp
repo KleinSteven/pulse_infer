@@ -1,5 +1,7 @@
 #include "pulse/runtime/kv_cache_manager.hpp"
 
+#include <algorithm>
+
 #include "pulse/logging.hpp"
 
 namespace pulse::runtime {
@@ -9,13 +11,15 @@ KVCacheManager::KVCacheManager(i32 num_blocks,
                                i32 num_layers,
                                i32 num_kv_heads,
                                i32 head_size,
-                               DeviceType device)
+                               DeviceType device,
+                               DataType dtype)
     : num_blocks_(num_blocks),
       block_size_(block_size),
       num_layers_(num_layers),
       num_kv_heads_(num_kv_heads),
       head_size_(head_size),
-      device_(device) {
+      device_(device),
+      dtype_(dtype) {
     block_manager_ = std::make_unique<BlockManager>(num_blocks, block_size);
 
     block_table_ = std::make_unique<BlockTable>();
@@ -27,7 +31,7 @@ KVCacheManager::KVCacheManager(i32 num_blocks,
     pulse::info("   Num layers: {}", num_layers);
     pulse::info("   Num KV heads: {}", num_kv_heads);
     pulse::info("   Head size: {}", head_size);
-    pulse::info("   KV dim: : {}", num_kv_heads * head_size);
+    pulse::info("   KV dim: {}", num_kv_heads * head_size);
 }
 
 Result<void> KVCacheManager::init() {
@@ -37,7 +41,7 @@ Result<void> KVCacheManager::init() {
 
     i64 elements_per_block = static_cast<i64>(num_kv_heads_) * block_size_ * head_size_;
     i64 elements_per_layer = elements_per_block * num_blocks_;
-    i64 bytes_per_layer = elements_per_layer * static_cast<i64>(sizeof(f32));
+    i64 bytes_per_layer = elements_per_layer * static_cast<i64>(data_type_size(dtype_));
     i64 total_bytes = bytes_per_layer * num_layers_ * 2;
 
     pulse::info("Initializing block-based KV cache:");
@@ -52,7 +56,7 @@ Result<void> KVCacheManager::init() {
     for (i32 layer = 0; layer < num_layers_; ++layer) {
         // key cache: [num_blocks, num_kv_heads, block_size, head_size]
         auto key_result =
-            Tensor::create({num_blocks_, num_kv_heads_, block_size_, head_size_}, DataType::Float32);
+            Tensor::create({num_blocks_, num_kv_heads_, block_size_, head_size_}, dtype_, device_);
 
         if (!key_result) {
             return Err<void>(std::move(key_result.error()));
@@ -62,7 +66,7 @@ Result<void> KVCacheManager::init() {
 
         // value cache: [num_blocks, num_kv_heads, block_size, head_size]
         auto value_result =
-            Tensor::create({num_blocks_, num_kv_heads_, block_size_, head_size_}, DataType::Float32);
+            Tensor::create({num_blocks_, num_kv_heads_, block_size_, head_size_}, dtype_, device_);
 
         if (!value_result) {
             return Err<void>(std::move(value_result.error()));
@@ -276,10 +280,7 @@ void KVCacheManager::reset() {
 }
 
 i32 KVCacheManager::get_max_blocks_per_seq() const {
-    // Conservative estimate: assume maximum sequence length of 4096 tokens
-    // In practice, this should be configurable or computed from actual usage
-    const i32 max_seq_len = 4096;
-    return (max_seq_len + block_size_ - 1) / block_size_;
+    return std::max(1, num_blocks_);
 }
 
 }  // namespace pulse::runtime

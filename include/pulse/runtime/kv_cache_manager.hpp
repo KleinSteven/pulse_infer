@@ -15,7 +15,8 @@ public:
                    i32 num_layers,
                    i32 num_kv_heads,
                    i32 head_size,
-                   DeviceType device);
+                   DeviceType device,
+                   DataType dtype = DataType::Float32);
 
 
     Result<void> init();
@@ -88,6 +89,9 @@ public:
         return num_kv_heads_ * head_size_;
     }
 
+    [[nodiscard]] DataType dtype() const noexcept {
+        return dtype_;
+    }
 
     i32 get_max_blocks_per_seq() const;
 
@@ -110,6 +114,8 @@ private:
 
     // Device for allocation
     DeviceType device_;
+
+    DataType dtype_ = DataType::Float32;
 
     std::unique_ptr<runtime::BlockManager> block_manager_;
     std::unique_ptr<runtime::BlockTable> block_table_;

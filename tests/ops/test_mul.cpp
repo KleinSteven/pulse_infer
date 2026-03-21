@@ -54,18 +54,6 @@ std::vector<T> mul_expected(const std::vector<T>& lhs, const std::vector<T>& rhs
     return result;
 }
 
-#ifdef PULSE_USE_CUDA
-template<typename T>
-float scalar_to_float(T value) {
-    return static_cast<float>(value);
-}
-
-template<>
-float scalar_to_float<bf16>(bf16 value) {
-    return __bfloat162float(value);
-}
-#endif
-
 }  // namespace
 
 TEST(TensorMulTest, MultipliesFloat32CpuTensors) {
@@ -118,7 +106,7 @@ TEST(TensorMulTest, MultipliesBFloat16CudaTensors) {
     const auto host_output = std::move(host_result.value());
     for (usize i = 0; i < lhs_values.size(); ++i) {
         const auto expected =
-            __bfloat162float(__float2bfloat16(scalar_to_float(lhs_values[i]) * scalar_to_float(rhs_values[i])));
+            __bfloat162float(__float2bfloat16(__bfloat162float(lhs_values[i]) * __bfloat162float(rhs_values[i])));
         EXPECT_NEAR(__bfloat162float(host_output.ptr<bf16>()[i]), expected, 1e-3f);
     }
 }

@@ -186,21 +186,6 @@ void expect_values_near(const T* actual, const std::vector<T>& expected, double 
 
 #ifdef PULSE_USE_CUDA
 template<typename T>
-float scalar_to_float(T value) {
-    return static_cast<float>(value);
-}
-
-template<>
-float scalar_to_float<f16>(f16 value) {
-    return __half2float(value);
-}
-
-template<>
-float scalar_to_float<bf16>(bf16 value) {
-    return __bfloat162float(value);
-}
-
-template<typename T>
 float quantize_float_to_output(float value);
 
 template<typename T>
@@ -261,11 +246,17 @@ std::vector<float> matmul_expected_as_float(const T* lhs,
                 const i32 lhs_col = transpose_lhs ? row : inner;
                 const i32 rhs_row = transpose_rhs ? col : inner;
                 const i32 rhs_col = transpose_rhs ? inner : col;
-
-                sum += scalar_to_float(lhs[static_cast<usize>(lhs_row) * static_cast<usize>(lhs_stride) +
-                                           static_cast<usize>(lhs_col)]) *
-                       scalar_to_float(rhs[static_cast<usize>(rhs_row) * static_cast<usize>(rhs_stride) +
-                                           static_cast<usize>(rhs_col)]);
+                const auto lhs_value =
+                    lhs[static_cast<usize>(lhs_row) * static_cast<usize>(lhs_stride) + static_cast<usize>(lhs_col)];
+                const auto rhs_value =
+                    rhs[static_cast<usize>(rhs_row) * static_cast<usize>(rhs_stride) + static_cast<usize>(rhs_col)];
+                if constexpr (std::is_same_v<T, f16>) {
+                    sum += __half2float(lhs_value) * __half2float(rhs_value);
+                } else if constexpr (std::is_same_v<T, bf16>) {
+                    sum += __bfloat162float(lhs_value) * __bfloat162float(rhs_value);
+                } else {
+                    sum += static_cast<float>(lhs_value) * static_cast<float>(rhs_value);
+                }
             }
             result[static_cast<usize>(row) * static_cast<usize>(n) + static_cast<usize>(col)] =
                 quantize_float_to_output<T>(sum);
@@ -279,7 +270,13 @@ void expect_values_near(const T* actual, const std::vector<float>& expected, flo
     ASSERT_NE(actual, nullptr);
 
     for (usize i = 0; i < expected.size(); ++i) {
-        EXPECT_NEAR(scalar_to_float(actual[i]), expected[i], tolerance);
+        if constexpr (std::is_same_v<T, f16>) {
+            EXPECT_NEAR(__half2float(actual[i]), expected[i], tolerance);
+        } else if constexpr (std::is_same_v<T, bf16>) {
+            EXPECT_NEAR(__bfloat162float(actual[i]), expected[i], tolerance);
+        } else {
+            EXPECT_NEAR(static_cast<float>(actual[i]), expected[i], tolerance);
+        }
     }
 }
 #endif

@@ -162,16 +162,6 @@ void expect_values_eq(const T* actual, const std::vector<T>& expected) {
 
 #ifdef PULSE_USE_CUDA
 template<typename T>
-float scalar_to_float(T value) {
-    return static_cast<float>(value);
-}
-
-template<>
-float scalar_to_float<bf16>(bf16 value) {
-    return __bfloat162float(value);
-}
-
-template<typename T>
 std::vector<float> embedding_expected_as_float(const std::vector<i32>& input,
                                                const std::vector<T>& weight,
                                                i32 vocab_size,
@@ -179,7 +169,11 @@ std::vector<float> embedding_expected_as_float(const std::vector<i32>& input,
     auto expected = embedding_expected(input, weight, vocab_size, embedding_dim);
     std::vector<float> output(expected.size());
     for (usize i = 0; i < expected.size(); ++i) {
-        output[i] = scalar_to_float(expected[i]);
+        if constexpr (std::is_same_v<T, bf16>) {
+            output[i] = __bfloat162float(expected[i]);
+        } else {
+            output[i] = static_cast<float>(expected[i]);
+        }
     }
     return output;
 }
@@ -189,7 +183,11 @@ void expect_values_near(const T* actual, const std::vector<float>& expected, flo
     ASSERT_NE(actual, nullptr);
 
     for (usize i = 0; i < expected.size(); ++i) {
-        EXPECT_NEAR(scalar_to_float(actual[i]), expected[i], tolerance);
+        if constexpr (std::is_same_v<T, bf16>) {
+            EXPECT_NEAR(__bfloat162float(actual[i]), expected[i], tolerance);
+        } else {
+            EXPECT_NEAR(static_cast<float>(actual[i]), expected[i], tolerance);
+        }
     }
 }
 #endif

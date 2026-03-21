@@ -95,26 +95,11 @@ void assert_tensor_created(const TensorWithValues<T>& tensor_with_values) {
 }
 
 template<typename T>
-double scalar_to_double(T value) {
-    return static_cast<double>(value);
-}
-
-template<typename T>
 double quantize_output_to_double(double value) {
     return value;
 }
 
 #ifdef PULSE_USE_CUDA
-template<>
-double scalar_to_double<f16>(f16 value) {
-    return static_cast<double>(__half2float(value));
-}
-
-template<>
-double scalar_to_double<bf16>(bf16 value) {
-    return static_cast<double>(__bfloat162float(value));
-}
-
 template<>
 double quantize_output_to_double<f16>(double value) {
     return static_cast<double>(__half2float(__float2half(static_cast<float>(value))));
@@ -155,8 +140,18 @@ std::vector<double> rope_expected_as_double(const std::vector<T>& input,
                 const double angle = absolute_pos / std::pow(theta, exponent);
                 const double cos_value = std::cos(angle);
                 const double sin_value = std::sin(angle);
-                const double x0 = scalar_to_double(input[even_idx]);
-                const double x1 = scalar_to_double(input[odd_idx]);
+                double x0 = 0.0;
+                double x1 = 0.0;
+                if constexpr (std::is_same_v<T, f16>) {
+                    x0 = static_cast<double>(__half2float(input[even_idx]));
+                    x1 = static_cast<double>(__half2float(input[odd_idx]));
+                } else if constexpr (std::is_same_v<T, bf16>) {
+                    x0 = static_cast<double>(__bfloat162float(input[even_idx]));
+                    x1 = static_cast<double>(__bfloat162float(input[odd_idx]));
+                } else {
+                    x0 = static_cast<double>(input[even_idx]);
+                    x1 = static_cast<double>(input[odd_idx]);
+                }
 
                 output[even_idx] = quantize_output_to_double<T>(x0 * cos_value - x1 * sin_value);
                 output[odd_idx] = quantize_output_to_double<T>(x0 * sin_value + x1 * cos_value);
@@ -164,7 +159,14 @@ std::vector<double> rope_expected_as_double(const std::vector<T>& input,
 
             for (i32 dim = effective_rotary_dim; dim < head_dim; ++dim) {
                 const auto idx = token_base + static_cast<usize>(dim);
-                output[idx] = quantize_output_to_double<T>(scalar_to_double(input[idx]));
+                if constexpr (std::is_same_v<T, f16>) {
+                    output[idx] = quantize_output_to_double<T>(static_cast<double>(__half2float(input[idx])));
+                } else if constexpr (std::is_same_v<T, bf16>) {
+                    output[idx] =
+                        quantize_output_to_double<T>(static_cast<double>(__bfloat162float(input[idx])));
+                } else {
+                    output[idx] = quantize_output_to_double<T>(static_cast<double>(input[idx]));
+                }
             }
         }
     }
@@ -177,7 +179,13 @@ void expect_values_near(const T* actual, const std::vector<double>& expected, do
     ASSERT_NE(actual, nullptr);
 
     for (usize i = 0; i < expected.size(); ++i) {
-        EXPECT_NEAR(scalar_to_double(actual[i]), expected[i], tolerance);
+        if constexpr (std::is_same_v<T, f16>) {
+            EXPECT_NEAR(static_cast<double>(__half2float(actual[i])), expected[i], tolerance);
+        } else if constexpr (std::is_same_v<T, bf16>) {
+            EXPECT_NEAR(static_cast<double>(__bfloat162float(actual[i])), expected[i], tolerance);
+        } else {
+            EXPECT_NEAR(static_cast<double>(actual[i]), expected[i], tolerance);
+        }
     }
 }
 

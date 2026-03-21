@@ -8,6 +8,10 @@
 #include "pulse/core/var.hpp"
 #include "pulse/model/qwen3/config.hpp"
 
+namespace pulse::runtime {
+class KVCacheManager;
+}
+
 namespace pulse::layer {
 class Embedding;
 class Linear;
@@ -33,6 +37,18 @@ public:
 
     [[nodiscard]] Result<void> init();
     [[nodiscard]] Result<void> forward(i32 token, i32 position, Tensor& logits);
+    [[nodiscard]] Result<void> init_paged_cache(i32 num_blocks, i32 block_size);
+    [[nodiscard]] runtime::KVCacheManager* paged_cache_manager() noexcept {
+        return paged_cache_manager_.get();
+    }
+    [[nodiscard]] const runtime::KVCacheManager* paged_cache_manager() const noexcept {
+        return paged_cache_manager_.get();
+    }
+    [[nodiscard]] Result<void> forward_batched(const std::vector<i32>& tokens,
+                                               const std::vector<i32>& positions,
+                                               const std::vector<i32>& seq_ids,
+                                               Tensor& logits);
+    [[nodiscard]] Result<Qwen3Model> fork() const;
 
     void reset_cache();
 
@@ -62,9 +78,11 @@ private:
     std::vector<std::unique_ptr<DecoderLayer>> layers_;
     std::vector<Tensor> key_cache_;
     std::vector<Tensor> value_cache_;
+    std::unique_ptr<runtime::KVCacheManager> paged_cache_manager_;
     Tensor final_norm_buffer_;
 
     bool initialized_ = false;
+    bool use_paged_cache_ = false;
 };
 
 }  // namespace pulse::model

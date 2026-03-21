@@ -67,7 +67,16 @@ if(PULSE_BUILD_CUDA)
     qwen3_infer.cpp
   )
 
+  add_executable(qwen3_continuous_batch_demo
+    qwen3_continuous_batch_demo.cpp
+  )
+
   target_link_libraries(qwen3_infer
+    PRIVATE
+      pulse_core
+  )
+
+  target_link_libraries(qwen3_continuous_batch_demo
     PRIVATE
       pulse_core
   )
@@ -77,10 +86,20 @@ if(PULSE_BUILD_CUDA)
       ${PULSE_COMPILE_OPTIONS}
   )
 
+  target_compile_options(qwen3_continuous_batch_demo
+    PRIVATE
+      ${PULSE_COMPILE_OPTIONS}
+  )
+
   target_link_options(qwen3_infer
     PRIVATE
       ${PULSE_LINK_OPTIONS}
   )
+
+  target_link_options(qwen3_continuous_batch_demo
+    PRIVATE
+      ${PULSE_LINK_OPTIONS}
+  )
 else()
-  message(STATUS "Skipping qwen3_infer because PULSE_BUILD_CUDA=OFF")
+  message(STATUS "Skipping qwen3_infer, qwen3_continuous_batch_demo and qwen3_paged_attention_demo because PULSE_BUILD_CUDA=OFF")
 endif()
